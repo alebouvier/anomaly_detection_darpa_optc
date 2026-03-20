@@ -1,0 +1,77 @@
+
+MODEL:
+  LEN_ENCODE_PATH: 25
+  DURATION_EVENT: 1e9
+  WINDOW: 5
+
+  SPLIT_PATH: "://|:/|//|/"
+  SPLIT_EXTENSION: (r"^(.*)\.(.*?)$")
+  HARD_DEVICE: "([/]+Device[/]+HarddiskVolume1)"
+  SIMPLE_HARD_DEVICE: "C:"
+  SPLIT_PATH_COMMAND_LINE: '"[^"]*"|\S+'
+
+  SELECTED_NODES: "Process"
+  NODES_TYPES_ALL:
+    - "Node"
+    - "Process"
+    - "File"
+    - "Flow"
+    - "Module"
+    - "Thread"
+    - "Registry"
+    - "Task"
+    - "Shell"
+    - "Host"
+    - "Service"
+    - "User_session"
+  LST_ACTION:
+    - "CREATE"
+    - "DELETE"
+    - "MODIFY"
+    - "READ"
+    - "RENAME"
+    - "WRITE"
+    - "MESSAGE"
+    - "OPEN"
+    - "START"
+    - "LOAD"
+    - "TERMINATE"
+    - "ADD"
+    - "EDIT"
+    - "REMOVE"
+    - "COMMAND"
+    - "REMOTE_CREATE"
+    - "GRANT"
+    - "INTERACTIVE"
+    - "LOGIN"
+    - "LOGOUT"
+    - "RDP"
+    - "REMOTE"
+    - "UNLOCK"
+  LST_ACTION_END:
+    - "DELETE"
+    - "TERMINATE"
+    - "REMOVE"
+    - "LOGOUT"
+  LST_ACTION_START:
+    - "CREATE"
+    - "START"
+    - "LOAD"
+    - "ADD"
+    - "COMMAND"
+    - "LOGIN"
+
+  SPLITS:
+    VAL_SPLIT: "2019-09-22T12:00:00.000-04:00" #graph
+    TEST_SPLIT: "2019-09-23T00:00:00.000-04:00"
+    START_ENT: "2019-09-20T12:00:00.000-04:00" #entité
+    VAL_ENT: "2019-09-2T12:00:00.000-04:00"
+
+  TRAINING:        
+    EPOCHS_g: 30
+    BATCH_g: 16
+    EPOCHS_e: 10
+    BATCH_e: 1024 #34 
+    LR: 0.0002
+  
+  LABEL: "labels_malicious.csv"
