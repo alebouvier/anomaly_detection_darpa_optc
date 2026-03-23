@@ -138,7 +138,7 @@ def evaluate_model_link_prediction(model_name: str, model: nn.Module, neighbor_s
             evaluate_losses.append(loss.item())
             batch_losses.append(loss.item())
 
-            evaluate_metrics.append(get_link_prediction_metrics(predicts=predicts, labels=labels))
+            evaluate_metrics.append(get_link_prediction_metrics(predicts=predicts, labels=labels, threshold=0.5))
 
             if batch_idx % 1000 == 0: 
                 evaluate_idx_data_loader_tqdm.set_description(f'evaluate for the {batch_idx + 1}-th batch, evaluate loss: {loss.item()}')
@@ -356,7 +356,7 @@ def evaluate_edge_bank_link_prediction(args: argparse.Namespace, train_data: Dat
 
             test_losses.append(loss.item())
 
-            test_metrics.append(get_link_prediction_metrics(predicts=predicts, labels=labels))
+            test_metrics.append(get_link_prediction_metrics(predicts=predicts, labels=labels, threshold=0.5))
 
             test_idx_data_loader_tqdm.set_description(f'test for the {batch_idx + 1}-th batch, test loss: {loss.item()}')
 
