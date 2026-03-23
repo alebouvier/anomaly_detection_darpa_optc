@@ -51,7 +51,7 @@ class Encoding_builder:
         nodes = list(set(ac + dst))
         # print("Nb processes: ", len(nodes))
         if len(nodes) == 0:
-            print("Error no process is this graph")
+            print("Error no process in this graph")
             exit(1)
         try:
             enc_struc_g, enc_struc_e, fe_b = self.encoding(self.g, nodes)

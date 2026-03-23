@@ -422,81 +422,111 @@ def timestamp_anomaly_result(predicted_links, actual_links, non_exist_links, val
 
 def main(args):
 
+    warnings.filterwarnings('ignore')
+
+
     # get data for training, validation and testing
     node_raw_features, edge_raw_features, full_data, train_data, val_data, test_data, new_node_val_data, new_node_test_data = \
-        get_link_prediction_data(dataset_name=args.dataset_name, val_ratio=args.val_ratio, test_ratio=args.test_ratio)
+        get_link_prediction_data(dataset_name=args.dataset_name, val_start=args.start_val, test_start=args.start_test)
 
     # initialize validation and test neighbor sampler to retrieve temporal graph
     full_neighbor_sampler = get_neighbor_sampler(data=full_data, sample_neighbor_strategy=args.sample_neighbor_strategy,
                                                  time_scaling_factor=args.time_scaling_factor, seed=1)
-    
+
+    # initialize negative samplers, set seeds for testing so negatives are the same across different runs
+    # in the inductive setting, negatives are sampled only amongst other new nodes
     test_neg_edge_sampler = NegativeEdgeSampler(src_node_ids=full_data.src_node_ids, dst_node_ids=full_data.dst_node_ids, seed=2)
+    new_node_test_neg_edge_sampler = NegativeEdgeSampler(src_node_ids=new_node_test_data.src_node_ids, dst_node_ids=new_node_test_data.dst_node_ids, seed=3)
 
+    # get data loaders
     test_idx_data_loader = get_idx_data_loader(indices_list=list(range(len(test_data.src_node_ids))), batch_size=args.batch_size, shuffle=False)
+    new_node_test_idx_data_loader = get_idx_data_loader(indices_list=list(range(len(new_node_test_data.src_node_ids))), batch_size=args.batch_size, shuffle=False)
 
-    # set up logger
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
-    os.makedirs(f"./logs/{args.model_name}/{args.dataset_name}/{args.save_result_name}/", exist_ok=True)
-    # create file handler that logs debug and higher level messages
-    fh = logging.FileHandler(f"./logs/{args.model_name}/{args.dataset_name}/{args.save_result_name}/{str(time.time())}.log")
-    fh.setLevel(logging.DEBUG)
-    # create console handler with a higher log level
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.WARNING)
-    # create formatter and add it to the handlers
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    fh.setFormatter(formatter)
-    ch.setFormatter(formatter)
-    # add the handlers to logger
-    logger.addHandler(fh)
-    logger.addHandler(ch)
+    # we separately evaluate EdgeBank, since EdgeBank does not contain any trainable parameters and has a different evaluation pipeline
+    if args.model_name == 'EdgeBank':
+        evaluate_edge_bank_link_prediction(args=args, train_data=train_data, val_data=val_data, test_idx_data_loader=test_idx_data_loader,
+                                           test_neg_edge_sampler=test_neg_edge_sampler, test_data=test_data)
 
-    run_start_time = time.time()
-    logger.info(f"********** Run {run + 1} starts. **********")
-
-    logger.info(f'configuration is {args}')
-
-    # create model
-    if args.model_name == 'TGAT':
-        dynamic_backbone = TGAT(node_raw_features=node_raw_features, edge_raw_features=edge_raw_features, neighbor_sampler=full_neighbor_sampler,
-                                time_feat_dim=args.time_feat_dim, num_layers=args.num_layers, num_heads=args.num_heads, dropout=args.dropout, device=args.device)
-    elif args.model_name == 'GraphMixer':
-        dynamic_backbone = GraphMixer(node_raw_features=node_raw_features, edge_raw_features=edge_raw_features, neighbor_sampler=full_neighbor_sampler,
-                                        time_feat_dim=args.time_feat_dim, num_tokens=args.num_neighbors, num_layers=args.num_layers, dropout=args.dropout, device=args.device)
-    elif args.model_name == 'DyGFormer':
-        dynamic_backbone = DyGFormer(node_raw_features=node_raw_features, edge_raw_features=edge_raw_features, neighbor_sampler=full_neighbor_sampler,
-                                        time_feat_dim=args.time_feat_dim, channel_embedding_dim=args.channel_embedding_dim, patch_size=args.patch_size,
-                                        num_layers=args.num_layers, num_heads=args.num_heads, dropout=args.dropout,
-                                        max_input_sequence_length=args.max_input_sequence_length, device=args.device)
     else:
-        raise ValueError(f"Wrong value for model_name {args.model_name}!")
-    link_predictor = MergeLayer(input_dim1=node_raw_features.shape[1], input_dim2=node_raw_features.shape[1],
-                                hidden_dim=node_raw_features.shape[1], output_dim=1)
-    model = nn.Sequential(dynamic_backbone, link_predictor)
-    logger.info(f'model -> {model}')
-    logger.info(f'model name: {args.model_name}, #parameters: {get_parameter_sizes(model) * 4} B, '
-                f'{get_parameter_sizes(model) * 4 / 1024} KB, {get_parameter_sizes(model) * 4 / 1024 / 1024} MB.')
+        test_metric_all_runs, new_node_test_metric_all_runs = [], []
 
-    # load the saved model
-    load_model_folder = f"./saved_models/{args.model_name}/{args.dataset_name}/{args.load_model_name}"
-    early_stopping = EarlyStopping(patience=0, save_model_folder=load_model_folder,
-                                    save_model_name=args.load_model_name, logger=logger, model_name=args.model_name)
-    early_stopping.load_checkpoint(model, map_location='cpu')
+        for run in range(args.num_runs):
 
-    model = convert_to_gpu(model, device=args.device)
+            set_random_seed(seed=run)
 
-    loss_func = nn.BCELoss()
+            args.seed = run
+            args.load_model_name = f'{args.model_name}_seed{args.seed}'
+            args.save_result_name = f'{args.negative_sample_strategy}_negative_sampling_{args.model_name}_seed{args.seed}'
+            args.experiment_folder = f"experiments/{args.dataset_name}/{args.model_name}"
+            create_folder(args.experiment_folder)
 
-    test_losses, test_metrics, test_predicted_links, test_actual_links, non_exist_links = evaluate_model_link_prediction(model_name=args.model_name,
-                                                                       model=model,
-                                                                       neighbor_sampler=full_neighbor_sampler,
-                                                                       evaluate_idx_data_loader=test_idx_data_loader,
-                                                                       evaluate_neg_edge_sampler=test_neg_edge_sampler,
-                                                                       evaluate_data=test_data,
-                                                                       loss_func=loss_func,
-                                                                       num_neighbors=args.num_neighbors,
-                                                                       time_gap=args.time_gap,
-                                                                       full_return= True, temp=args.temperature)
-    timestamp_anomaly_result(test_predicted_links, test_actual_links, non_exist_links, validate = False, names = (args.dataset_name,args.model_name, args.temperature))
+            # set up logger
+            logging.basicConfig(level=logging.INFO)
+            logger = logging.getLogger()
+            logger.setLevel(logging.DEBUG)
+            create_folder(f"{args.experiment_folder}/{args.save_result_name}/logs")
+            # create file handler that logs debug and higher level messages
+            fh = logging.FileHandler(f"{args.experiment_folder}/{args.save_result_name}/logs/{str(time.time())}.log")
+            fh.setLevel(logging.DEBUG)
+            # create console handler with a higher log level
+            ch = logging.StreamHandler()
+            ch.setLevel(logging.WARNING)
+            # create formatter and add it to the handlers
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            fh.setFormatter(formatter)
+            ch.setFormatter(formatter)
+            # add the handlers to logger
+            logger.addHandler(fh)
+            logger.addHandler(ch)
+
+            run_start_time = time.time()
+            logger.info(f"********** Run {run + 1} starts. **********")
+
+            logger.info(f'configuration is {args}')
+
+            # create model
+            if args.model_name == 'TGAT':
+                dynamic_backbone = TGAT(node_raw_features=node_raw_features, edge_raw_features=edge_raw_features, neighbor_sampler=full_neighbor_sampler,
+                                        time_feat_dim=args.time_feat_dim, num_layers=args.num_layers, num_heads=args.num_heads, dropout=args.dropout, device=args.device)
+            elif args.model_name == 'GraphMixer':
+                dynamic_backbone = GraphMixer(node_raw_features=node_raw_features, edge_raw_features=edge_raw_features, neighbor_sampler=full_neighbor_sampler,
+                                              time_feat_dim=args.time_feat_dim, num_tokens=args.num_neighbors, num_layers=args.num_layers, dropout=args.dropout, device=args.device)
+            elif args.model_name == 'DyGFormer':
+                dynamic_backbone = DyGFormer(node_raw_features=node_raw_features, edge_raw_features=edge_raw_features, neighbor_sampler=full_neighbor_sampler,
+                                             time_feat_dim=args.time_feat_dim, channel_embedding_dim=args.channel_embedding_dim, patch_size=args.patch_size,
+                                             num_layers=args.num_layers, num_heads=args.num_heads, dropout=args.dropout,
+                                             max_input_sequence_length=args.max_input_sequence_length, device=args.device)
+            else:
+                raise ValueError(f"Wrong value for model_name {args.model_name}!")
+            link_predictor = MergeLayer(input_dim1=node_raw_features.shape[1], input_dim2=node_raw_features.shape[1],
+                                        hidden_dim=node_raw_features.shape[1], output_dim=1)
+            model = nn.Sequential(dynamic_backbone, link_predictor)
+            logger.info(f'model -> {model}')
+            logger.info(f'model name: {args.model_name}, #parameters: {get_parameter_sizes(model) * 4} B, '
+                        f'{get_parameter_sizes(model) * 4 / 1024} KB, {get_parameter_sizes(model) * 4 / 1024 / 1024} MB.')
+
+            # load the saved model
+            load_model_folder = f"{args.experiment_folder}/{args.load_model_name}/saved_models/"
+            early_stopping = EarlyStopping(patience=0, save_model_folder=load_model_folder,
+                                           save_model_name=args.load_model_name, logger=logger, model_name=args.model_name)
+            early_stopping.load_checkpoint(model, map_location='cpu')
+
+            model = convert_to_gpu(model, device=args.device)
+
+            loss_func = nn.BCELoss()
+
+            # evaluate the best model
+            logger.info(f'get final performance on dataset {args.dataset_name}...')
+
+
+            test_losses, test_metrics, test_predicted_links, test_actual_links, non_exist_links = evaluate_model_link_prediction(model_name=args.model_name,
+                                                                            model=model,
+                                                                            neighbor_sampler=full_neighbor_sampler,
+                                                                            evaluate_idx_data_loader=test_idx_data_loader,
+                                                                            evaluate_neg_edge_sampler=test_neg_edge_sampler,
+                                                                            evaluate_data=test_data,
+                                                                            loss_func=loss_func,
+                                                                            num_neighbors=args.num_neighbors,
+                                                                            time_gap=args.time_gap,
+                                                                            full_return= True, temp=args.temperature)
+            timestamp_anomaly_result(test_predicted_links, test_actual_links, non_exist_links, validate = False, names = (args.dataset_name,args.model_name, args.temperature))
