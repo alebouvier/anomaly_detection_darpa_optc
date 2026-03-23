@@ -15,7 +15,7 @@ from utils.utils import create_folder
 class GraphProcessor:
     """Process graph data and generate CSV files for dynamic graph analysis."""
     
-    def __init__(self, host, input_path, output_path, label_path, with_features):
+    def __init__(self, host, input_path, output_path, label_path, start_val, start_test, with_features):
         self.host = host
         self.folder_path = Path(input_path)
         self.csv_output_path = output_path
@@ -35,8 +35,8 @@ class GraphProcessor:
         self._configure_dataset_settings()
         
         # Define split dates
-        self.val_start_date = datetime(2019, 9, 24, 0, 0).timestamp()
-        self.test_start_date = datetime(2019, 9, 25, 0, 0, 0).timestamp()
+        self.val_start_date = datetime.date.strptime(start_val, "%Y-%m-%dT%H:%M").timestamp()
+        self.test_start_date = datetime.date.strptime(start_test, "%Y-%m-%dT%H:%M").timestamp()
 
     def _load_anomaly_ids(self):
         """Load anomaly IDs from JSON file."""
@@ -504,10 +504,10 @@ def validate_paths(args):
     return errors
 
 
-def main(host, input_path, output_path, label_path, with_features):
+def main(host, input_path, output_path, label_path, start_val, start_test, with_features):
     
     # Process the dataset
-    processor = GraphProcessor(host, input_path, output_path, label_path, with_features)
+    processor = GraphProcessor(host, input_path, output_path, label_path, start_val, start_test, with_features)
     processor.process()
 
 

@@ -2,6 +2,7 @@ from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import random
 import pandas as pd
+import datetime as dt
 
 
 class CustomizedDataset(Dataset):
@@ -64,7 +65,7 @@ class Data:
         self.num_unique_nodes = len(self.unique_node_ids)
 
 
-def get_link_prediction_data(dataset_name: str, val_ratio: float, test_ratio: float):
+def get_link_prediction_data(dataset_name: str, val_start: float, test_start: float):
     """
     generate data for link prediction task (inductive & transductive settings)
     :param dataset_name: str, dataset name
@@ -74,9 +75,9 @@ def get_link_prediction_data(dataset_name: str, val_ratio: float, test_ratio: fl
             full_data, train_data, val_data, test_data, new_node_val_data, new_node_test_data, (Data object)
     """
     # Load data and train val test split
-    graph_df = pd.read_csv('./processed_data/{}/ml_{}.csv'.format(dataset_name, dataset_name))
-    edge_raw_features = np.load('./processed_data/{}/ml_{}.npy'.format(dataset_name, dataset_name))
-    node_raw_features = np.load('./processed_data/{}/ml_{}_node.npy'.format(dataset_name, dataset_name))
+    graph_df = pd.read_csv('data/processed_data/{}/ml_{}.csv'.format(dataset_name, dataset_name))
+    edge_raw_features = np.load('data/processed_data/{}/ml_{}.npy'.format(dataset_name, dataset_name))
+    node_raw_features = np.load('data/processed_data/{}/ml_{}_node.npy'.format(dataset_name, dataset_name))
 
     NODE_FEAT_DIM = EDGE_FEAT_DIM = 378
     assert NODE_FEAT_DIM >= node_raw_features.shape[1], f'Node feature dimension in dataset {dataset_name} is bigger than {NODE_FEAT_DIM}!'
@@ -92,7 +93,8 @@ def get_link_prediction_data(dataset_name: str, val_ratio: float, test_ratio: fl
     assert NODE_FEAT_DIM == node_raw_features.shape[1] and EDGE_FEAT_DIM == edge_raw_features.shape[1], 'Unaligned feature dimensions after feature padding!'
 
     # get the timestamp of validate and test set
-    val_time, test_time = list(np.quantile(graph_df.ts, [(1 - val_ratio - test_ratio), (1 - test_ratio)]))
+    val_time = dt.datetime.strptime(val_start, "%Y-%m-%dT%H:%M").timestamp()
+    test_time = dt.datetime.strptime(test_start, "%Y-%m-%dT%H:%M").timestamp()
 
     src_node_ids = graph_df.u.values.astype(np.longlong)
     dst_node_ids = graph_df.i.values.astype(np.longlong)
@@ -185,9 +187,9 @@ def get_node_classification_data(dataset_name: str, val_ratio: float, test_ratio
             full_data, train_data, val_data, test_data, (Data object)
     """
     # Load data and train val test split
-    graph_df = pd.read_csv('./processed_data/{}/ml_{}.csv'.format(dataset_name, dataset_name))
-    edge_raw_features = np.load('./processed_data/{}/ml_{}.npy'.format(dataset_name, dataset_name))
-    node_raw_features = np.load('./processed_data/{}/ml_{}_node.npy'.format(dataset_name, dataset_name))
+    graph_df = pd.read_csv('data/processed_data/{}/ml_{}.csv'.format(dataset_name, dataset_name))
+    edge_raw_features = np.load('data/processed_data/{}/ml_{}.npy'.format(dataset_name, dataset_name))
+    node_raw_features = np.load('data/processed_data/{}/ml_{}_node.npy'.format(dataset_name, dataset_name))
 
     NODE_FEAT_DIM = EDGE_FEAT_DIM = 172
     assert NODE_FEAT_DIM >= node_raw_features.shape[1], f'Node feature dimension in dataset {dataset_name} is bigger than {NODE_FEAT_DIM}!'
