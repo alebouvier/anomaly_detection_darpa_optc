@@ -14,7 +14,7 @@ from models.TCL import TCL
 from models.GraphMixer import GraphMixer
 from models.DyGFormer import DyGFormer
 from models.modules import MergeLayer
-from utils.utils import set_random_seed, convert_to_gpu, get_parameter_sizes, create_folder
+from utils.utils import set_random_seed, convert_to_gpu, get_parameter_sizes, create_folder, save_pkl
 from utils.utils import get_neighbor_sampler, NegativeEdgeSampler
 from evaluation.evaluate_models_utils import evaluate_model_link_prediction, evaluate_edge_bank_link_prediction
 from utils.DataLoader import get_idx_data_loader, get_link_prediction_data
@@ -147,28 +147,33 @@ def main(args):
                                                                                            loss_func=loss_func,
                                                                                            num_neighbors=args.num_neighbors,
                                                                                            time_gap=args.time_gap, temp=args.temperature)
-            if args.evaluate_test:
-                test_losses, test_metrics, test_predicted_links, test_actual_links, non_exist_links = evaluate_model_link_prediction(model_name=args.model_name,
-                                                                        model=model,
-                                                                        neighbor_sampler=full_neighbor_sampler,
-                                                                        evaluate_idx_data_loader=test_idx_data_loader,
-                                                                        evaluate_neg_edge_sampler=test_neg_edge_sampler,
-                                                                        evaluate_data=test_data,
-                                                                        loss_func=loss_func,
-                                                                        num_neighbors=args.num_neighbors,
-                                                                        time_gap=args.time_gap,
-                                                                        full_return= True, temp=args.temperature)
-                # timestamp_anomaly_result(test_predicted_links, test_actual_links, non_exist_links, validate = False, names = (args.dataset_name,args.model_name, args.temperature))
 
-                new_node_test_losses, new_node_test_metrics = evaluate_model_link_prediction(model_name=args.model_name,
-                                                                                            model=model,
-                                                                                            neighbor_sampler=full_neighbor_sampler,
-                                                                                            evaluate_idx_data_loader=new_node_test_idx_data_loader,
-                                                                                            evaluate_neg_edge_sampler=new_node_test_neg_edge_sampler,
-                                                                                            evaluate_data=new_node_test_data,
-                                                                                            loss_func=loss_func,
-                                                                                            num_neighbors=args.num_neighbors,
-                                                                                            time_gap=args.time_gap, temp=args.temperature)
+            test_losses, test_metrics, test_predicted_links, test_actual_links, non_exist_links = evaluate_model_link_prediction(model_name=args.model_name,
+                                                                    model=model,
+                                                                    neighbor_sampler=full_neighbor_sampler,
+                                                                    evaluate_idx_data_loader=test_idx_data_loader,
+                                                                    evaluate_neg_edge_sampler=test_neg_edge_sampler,
+                                                                    evaluate_data=test_data,
+                                                                    loss_func=loss_func,
+                                                                    num_neighbors=args.num_neighbors,
+                                                                    time_gap=args.time_gap,
+                                                                    full_return= True, temp=args.temperature)
+            test_score_folder = f"data/test_result_data/{args.dataset_name}/{args.model_name}"
+            create_folder(test_score_folder)
+            save_pkl(test_predicted_links, f"{test_score_folder}/test_predicted_links.pkl")
+            save_pkl(test_actual_links, f"{test_score_folder}/test_actual_links.pkl")
+            save_pkl(non_exist_links, f"{test_score_folder}/non_exist_links.pkl")
+
+
+            new_node_test_losses, new_node_test_metrics = evaluate_model_link_prediction(model_name=args.model_name,
+                                                                                        model=model,
+                                                                                        neighbor_sampler=full_neighbor_sampler,
+                                                                                        evaluate_idx_data_loader=new_node_test_idx_data_loader,
+                                                                                        evaluate_neg_edge_sampler=new_node_test_neg_edge_sampler,
+                                                                                        evaluate_data=new_node_test_data,
+                                                                                        loss_func=loss_func,
+                                                                                        num_neighbors=args.num_neighbors,
+                                                                                        time_gap=args.time_gap, temp=args.temperature)
             # store the evaluation metrics at the current run
             val_metric_dict, new_node_val_metric_dict, test_metric_dict, new_node_test_metric_dict = {}, {}, {}, {}
 
@@ -186,18 +191,18 @@ def main(args):
                     logger.info(f'new node val {metric_name}, {average_new_node_val_metric:.4f}')
                     new_node_val_metric_dict[metric_name] = average_new_node_val_metric
             
-            if args.evaluate_test:
-                logger.info(f'test loss: {np.mean(test_losses):.4f}')
-                for metric_name in test_metrics[0].keys():
-                    average_test_metric = np.mean([test_metric[metric_name] for test_metric in test_metrics])
-                    logger.info(f'test {metric_name}, {average_test_metric:.4f}')
-                    test_metric_dict[metric_name] = average_test_metric
+        
+            logger.info(f'test loss: {np.mean(test_losses):.4f}')
+            for metric_name in test_metrics[0].keys():
+                average_test_metric = np.mean([test_metric[metric_name] for test_metric in test_metrics])
+                logger.info(f'test {metric_name}, {average_test_metric:.4f}')
+                test_metric_dict[metric_name] = average_test_metric
 
-                logger.info(f'new node test loss: {np.mean(new_node_test_losses):.4f}')
-                for metric_name in new_node_test_metrics[0].keys():
-                    average_new_node_test_metric = np.mean([new_node_test_metric[metric_name] for new_node_test_metric in new_node_test_metrics])
-                    logger.info(f'new node test {metric_name}, {average_new_node_test_metric:.4f}')
-                    new_node_test_metric_dict[metric_name] = average_new_node_test_metric
+            logger.info(f'new node test loss: {np.mean(new_node_test_losses):.4f}')
+            for metric_name in new_node_test_metrics[0].keys():
+                average_new_node_test_metric = np.mean([new_node_test_metric[metric_name] for new_node_test_metric in new_node_test_metrics])
+                logger.info(f'new node test {metric_name}, {average_new_node_test_metric:.4f}')
+                new_node_test_metric_dict[metric_name] = average_new_node_test_metric
 
             single_run_time = time.time() - run_start_time
             logger.info(f'Run {run + 1} cost {single_run_time:.2f} seconds.')
@@ -205,9 +210,9 @@ def main(args):
             if args.model_name not in ['JODIE', 'DyRep', 'TGN']:
                 val_metric_all_runs.append(val_metric_dict)
                 new_node_val_metric_all_runs.append(new_node_val_metric_dict)
-            if args.evaluate_test:
-                test_metric_all_runs.append(test_metric_dict)
-                new_node_test_metric_all_runs.append(new_node_test_metric_dict)
+        
+            test_metric_all_runs.append(test_metric_dict)
+            new_node_test_metric_all_runs.append(new_node_test_metric_dict)
 
             # avoid the overlap of logs
             if run < args.num_runs - 1:
@@ -221,12 +226,12 @@ def main(args):
                     "new node val metrics": {metric_name: f'{new_node_val_metric_dict[metric_name]:.4f}' for metric_name in new_node_val_metric_dict}
                 }
                 result_json = json.dumps(result_json, indent=4)
-            if args.evaluate_test:
-                result_json = {
-                    "test metrics": {metric_name: f'{test_metric_dict[metric_name]:.4f}' for metric_name in test_metric_dict},
-                    "new node test metrics": {metric_name: f'{new_node_test_metric_dict[metric_name]:.4f}' for metric_name in new_node_test_metric_dict}
-                }
-                result_json = json.dumps(result_json, indent=4)
+
+            result_json = {
+                "test metrics": {metric_name: f'{test_metric_dict[metric_name]:.4f}' for metric_name in test_metric_dict},
+                "new node test metrics": {metric_name: f'{new_node_test_metric_dict[metric_name]:.4f}' for metric_name in new_node_test_metric_dict}
+            }
+            result_json = json.dumps(result_json, indent=4)
 
             save_result_folder = f"{args.experiment_folder}/saved_results"
             create_folder(save_result_folder)

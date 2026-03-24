@@ -17,7 +17,7 @@ from models.TCL import TCL
 from models.GraphMixer import GraphMixer
 from models.DyGFormer import DyGFormer
 from models.modules import MergeLayer
-from utils.utils import set_random_seed, convert_to_gpu, get_parameter_sizes, create_folder
+from utils.utils import set_random_seed, convert_to_gpu, get_parameter_sizes, create_folder, load_pickle_file
 from utils.utils import get_neighbor_sampler, NegativeEdgeSampler
 from evaluation.evaluate_models_utils import evaluate_model_link_prediction, evaluate_edge_bank_link_prediction
 from utils.DataLoader import get_idx_data_loader, get_link_prediction_data
@@ -42,7 +42,7 @@ def group_links_by_timestamp(predicted_links, actual_links):
 
 def calculate_timestamp_score(links, method='min'):
     """
-    Calculate anomaly score for a timestamp (lower = more anomalous).
+    Calculate anomaly score for a timestamp (higher = more anomalous).
     
     Args:
         links: List of (src, dst, score) tuples
@@ -57,10 +57,10 @@ def calculate_timestamp_score(links, method='min'):
     scores = [score for _, _, score in links]
     
     if method == 'min':
-        return min(scores)
+        return 1 - min(scores)
     elif method == 'bottom_1_percent':
         num_bottom = max(1, int(len(scores) * 0.01))
-        return np.mean(sorted(scores)[:num_bottom])
+        return 1 - np.mean(sorted(scores)[:num_bottom])
     else:
         raise ValueError(f"Unknown method: {method}")
 
@@ -123,7 +123,7 @@ def evaluate_timestamp_detection(predicted_links, actual_links, method, threshol
     for data in timestamp_data.values():
         score = calculate_timestamp_score(data['predicted'], method)
         label = int(is_timestamp_anomalous(data['actual']))
-        prediction = int(score < threshold)
+        prediction = int(score > threshold)
         
         scores.append(score)
         labels.append(label)
@@ -154,40 +154,6 @@ def evaluate_timestamp_detection(predicted_links, actual_links, method, threshol
         'threshold': threshold
     }
 
-def calculate_global_metrics(predicted_links, actual_links, method, validate, names):
-    """Calculate ROC AUC and Average Precision globally (without threshold)."""
-    global _roc_data
-    
-    # Suppress matplotlib warnings
-    logging.getLogger('matplotlib').setLevel(logging.WARNING)
-    logging.getLogger('PIL').setLevel(logging.WARNING)
-    
-    timestamp_data = group_links_by_timestamp(predicted_links, actual_links)
-    
-    scores = [calculate_timestamp_score(data['predicted'], method) for data in timestamp_data.values()]
-    labels = [int(is_timestamp_anomalous(data['actual'])) for data in timestamp_data.values()]
-    
-    if len(set(labels)) <= 1:
-        print(f"\nGlobal metrics (method={method}): Cannot calculate (only one class)")
-        print(f"  Timestamps: {len(labels)}")
-        return None, None
-    
-    # Invert scores (lower original score = higher anomaly likelihood)
-    inverted_scores = [1 - score for score in scores]
-    
-    roc_auc = roc_auc_score(labels, inverted_scores)
-    avg_precision = average_precision_score(labels, inverted_scores)
-    
-    print(f"\nGlobal metrics (method={method}):")
-    print(f"  ROC AUC: {roc_auc:.3f}")
-    print(f"  Average Precision: {avg_precision:.3f}")
-    print(f"  Timestamps: {len(labels)} (normal: {labels.count(0)}, anomalous: {labels.count(1)})")
-    
-    if not validate:
-        fpr, tpr, _ = roc_curve(labels, inverted_scores)
-        _roc_data[method] = {'fpr': fpr, 'tpr': tpr, 'roc_auc': roc_auc}
-    
-    return roc_auc, avg_precision
 
 def create_threshold_distribution_plots(predicted_links, actual_links, names):
     """Create distribution plots with thresholds for both methods."""
@@ -347,12 +313,12 @@ def save_timestamp_details(predicted_links, actual_links, method, names):
     
     print(f"  Timestamp details saved: {filename}")
 
-def print_results(results, threshold_source="validation"):
+def print_results(results):
     """Print evaluation results."""
     cm = results['cm']
     metrics = results['metrics']
     
-    print(f"\n--- RESULTS (Threshold: {results['threshold']:.4f} [{threshold_source}], Method: {results['method']}) ---")
+    print(f"\n--- RESULTS (Threshold: {results['threshold']:.4f}, Method: {results['method']}) ---")
     print(f"Confusion Matrix: TP={cm['TP']}, FN={cm['FN']}, FP={cm['FP']}, TN={cm['TN']}")
     print(f"Metrics: Acc={metrics['accuracy']:.3f}, Prec={metrics['precision']:.3f}, Rec={metrics['recall']:.3f}, F1={metrics['f1']:.3f}")
     print(f"Summary: {results['summary']['total']} timestamps ({results['summary']['anomalous']} anomalous)")
@@ -362,6 +328,7 @@ def print_link_stats(stats):
     print(f"\n--- LINK SCORE STATISTICS ---")
     for link_type, data in stats.items():
         print(f"{link_type.capitalize()} links: Count={data['count']}, Mean={data['mean']:.4f}, Std={data['std']:.4f}")
+
 
 def timestamp_anomaly_result(predicted_links, actual_links, non_exist_links, validate, 
                            names=None, methods=['min', 'bottom_1_percent']):
@@ -377,7 +344,7 @@ def timestamp_anomaly_result(predicted_links, actual_links, non_exist_links, val
         methods: List of scoring methods to evaluate
     """
     global _validation_thresholds
-    
+
     print(f"\n{'='*80}")
     print(f"TIMESTAMP ANOMALY DETECTION - {'VALIDATE' if validate else 'TEST'} {names}")
     print(f"{'='*80}")
@@ -385,148 +352,78 @@ def timestamp_anomaly_result(predicted_links, actual_links, non_exist_links, val
     # Calculate and print link statistics
     link_stats = calculate_link_statistics(predicted_links, actual_links, non_exist_links)
     print_link_stats(link_stats)
+
+    print("Logic: Timestamps with >=1 anomalous link are anomalous")
     
-    if validate:
-        print("Logic: Timestamps with >=1 anomalous link are anomalous")
-        _validation_thresholds = calculate_validation_thresholds(predicted_links, actual_links, methods)
+    # Create distribution plots
+    create_threshold_distribution_plots(predicted_links, actual_links, names)
+    
+    # Evaluate each method
+    for method in methods:
+        print(f"\n{'='*50}")
+        print(f"METHOD: {method.upper()}")
+        print(f"{'='*50}")
         
-        print(f"\n--- VALIDATION THRESHOLDS ---")
-        for method, threshold in _validation_thresholds.items():
-            print(f"  {method}: {threshold:.8f}")
-        print(f"Validation complete. Thresholds saved for test phase.")
+        roc_auc, avg_precision, best_th, best_f1_score = calculate_global_metrics(predicted_links, actual_links, method, validate, names)
+        save_timestamp_details(predicted_links, actual_links, method, names)
+        _validation_thresholds[method] = best_th
         
-    else:
-        print("Logic: Timestamps with >=1 anomalous link are anomalous")
+        print(f"\n--- THRESHOLD EVALUATION ---")
+        results = evaluate_timestamp_detection(predicted_links, actual_links, method, best_th)
         
-        # Create distribution plots
-        create_threshold_distribution_plots(predicted_links, actual_links, names)
-        
-        # Evaluate each method
-        for method in methods:
-            print(f"\n{'='*50}")
-            print(f"METHOD: {method.upper()}")
-            print(f"{'='*50}")
-            
-            calculate_global_metrics(predicted_links, actual_links, method, validate, names)
-            save_timestamp_details(predicted_links, actual_links, method, names)
-            
-            print(f"\n--- THRESHOLD EVALUATION ---")
-            for threshold_name, threshold in _validation_thresholds.items():
-                if threshold_name.startswith(method):
-                    results = evaluate_timestamp_detection(predicted_links, actual_links, method, threshold)
-                    threshold_source = "min" if threshold_name.endswith("_min") else "mean"
-                    print_results(results, threshold_source)
+        print_results(results)
         
         # Save combined ROC curves
         save_combined_roc_curve(names)
 
+def calculate_global_metrics(predicted_links, actual_links, method, names):
+    """Calculate ROC AUC and Average Precision globally (without threshold)."""
+    global _roc_data
+    
+    # Suppress matplotlib warnings
+    logging.getLogger('matplotlib').setLevel(logging.WARNING)
+    logging.getLogger('PIL').setLevel(logging.WARNING)
+    
+    timestamp_data = group_links_by_timestamp(predicted_links, actual_links)
+    
+    scores = [calculate_timestamp_score(data['predicted'], method) for data in timestamp_data.values()]
+    labels = [int(is_timestamp_anomalous(data['actual'])) for data in timestamp_data.values()]
+    
+    if len(set(labels)) <= 1:
+        print(f"\nGlobal metrics (method={method}): Cannot calculate (only one class)")
+        print(f"  Timestamps: {len(labels)}")
+        return None, None
+    
+    
+    roc_auc = roc_auc_score(labels, inverted_scores)
+    avg_precision = average_precision_score(labels, inverted_scores)
+    
+    fpr, tpr, threshold = roc_curve(labels, inverted_scores)
+
+    # find threshold that maximize f1_score
+    tp = tpr * labels.count(1)
+    fp = fpr * labels.count(0)
+    fn = (1-tpr) * labels.count(1)
+    f1_score = 2 * tp / (2 * tp + fp + fn)
+
+    best_th_idx = np.argmax(f1_score)
+    best_th = threshold[best_th_idx]
+    best_f1_score = f1_score[best_th_idx]
+
+    print(f"\nGlobal metrics (method={method}):")
+    print(f"  ROC AUC: {roc_auc:.3f}")
+    print(f"  Average Precision: {avg_precision:.3f}")
+    print(f"  F1-score: {best_f1_score}, maximized with threshold = {best_th}")
+    print(f"  Timestamps: {len(labels)} (normal: {labels.count(0)}, anomalous: {labels.count(1)})")
+
+    return roc_auc, avg_precision, best_th, best_f1_score
+
+
 def main(args):
+    test_score_folder = f"data/test_result_data/{args.dataset_name}/{args.model_name}"
 
-    warnings.filterwarnings('ignore')
+    test_predicted_links = load_pickle_file(f"{test_score_folder}/test_predicted_links.pkl")
+    test_actual_links = load_pickle_file( f"{test_score_folder}/test_actual_links.pkl")
+    non_exist_links = load_pickle_file( f"{test_score_folder}/non_exist_links.pkl")
 
-
-    # get data for training, validation and testing
-    node_raw_features, edge_raw_features, full_data, train_data, val_data, test_data, new_node_val_data, new_node_test_data = \
-        get_link_prediction_data(dataset_name=args.dataset_name, val_start=args.start_val, test_start=args.start_test)
-
-    # initialize validation and test neighbor sampler to retrieve temporal graph
-    full_neighbor_sampler = get_neighbor_sampler(data=full_data, sample_neighbor_strategy=args.sample_neighbor_strategy,
-                                                 time_scaling_factor=args.time_scaling_factor, seed=1)
-
-    # initialize negative samplers, set seeds for testing so negatives are the same across different runs
-    # in the inductive setting, negatives are sampled only amongst other new nodes
-    test_neg_edge_sampler = NegativeEdgeSampler(src_node_ids=full_data.src_node_ids, dst_node_ids=full_data.dst_node_ids, seed=2)
-    new_node_test_neg_edge_sampler = NegativeEdgeSampler(src_node_ids=new_node_test_data.src_node_ids, dst_node_ids=new_node_test_data.dst_node_ids, seed=3)
-
-    # get data loaders
-    test_idx_data_loader = get_idx_data_loader(indices_list=list(range(len(test_data.src_node_ids))), batch_size=args.batch_size, shuffle=False)
-    new_node_test_idx_data_loader = get_idx_data_loader(indices_list=list(range(len(new_node_test_data.src_node_ids))), batch_size=args.batch_size, shuffle=False)
-
-    # we separately evaluate EdgeBank, since EdgeBank does not contain any trainable parameters and has a different evaluation pipeline
-    if args.model_name == 'EdgeBank':
-        evaluate_edge_bank_link_prediction(args=args, train_data=train_data, val_data=val_data, test_idx_data_loader=test_idx_data_loader,
-                                           test_neg_edge_sampler=test_neg_edge_sampler, test_data=test_data)
-
-    else:
-        test_metric_all_runs, new_node_test_metric_all_runs = [], []
-
-        for run in range(args.num_runs):
-
-            set_random_seed(seed=run)
-
-            args.seed = run
-            args.load_model_name = f'{args.model_name}_seed{args.seed}'
-            args.save_result_name = f'{args.negative_sample_strategy}_negative_sampling_{args.model_name}_seed{args.seed}'
-            args.experiment_folder = f"experiments/{args.dataset_name}/{args.model_name}"
-            create_folder(args.experiment_folder)
-
-            # set up logger
-            logging.basicConfig(level=logging.INFO)
-            logger = logging.getLogger()
-            logger.setLevel(logging.DEBUG)
-            create_folder(f"{args.experiment_folder}/{args.save_result_name}/logs")
-            # create file handler that logs debug and higher level messages
-            fh = logging.FileHandler(f"{args.experiment_folder}/{args.save_result_name}/logs/{str(time.time())}.log")
-            fh.setLevel(logging.DEBUG)
-            # create console handler with a higher log level
-            ch = logging.StreamHandler()
-            ch.setLevel(logging.WARNING)
-            # create formatter and add it to the handlers
-            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            fh.setFormatter(formatter)
-            ch.setFormatter(formatter)
-            # add the handlers to logger
-            logger.addHandler(fh)
-            logger.addHandler(ch)
-
-            run_start_time = time.time()
-            logger.info(f"********** Run {run + 1} starts. **********")
-
-            logger.info(f'configuration is {args}')
-
-            # create model
-            if args.model_name == 'TGAT':
-                dynamic_backbone = TGAT(node_raw_features=node_raw_features, edge_raw_features=edge_raw_features, neighbor_sampler=full_neighbor_sampler,
-                                        time_feat_dim=args.time_feat_dim, num_layers=args.num_layers, num_heads=args.num_heads, dropout=args.dropout, device=args.device)
-            elif args.model_name == 'GraphMixer':
-                dynamic_backbone = GraphMixer(node_raw_features=node_raw_features, edge_raw_features=edge_raw_features, neighbor_sampler=full_neighbor_sampler,
-                                              time_feat_dim=args.time_feat_dim, num_tokens=args.num_neighbors, num_layers=args.num_layers, dropout=args.dropout, device=args.device)
-            elif args.model_name == 'DyGFormer':
-                dynamic_backbone = DyGFormer(node_raw_features=node_raw_features, edge_raw_features=edge_raw_features, neighbor_sampler=full_neighbor_sampler,
-                                             time_feat_dim=args.time_feat_dim, channel_embedding_dim=args.channel_embedding_dim, patch_size=args.patch_size,
-                                             num_layers=args.num_layers, num_heads=args.num_heads, dropout=args.dropout,
-                                             max_input_sequence_length=args.max_input_sequence_length, device=args.device)
-            else:
-                raise ValueError(f"Wrong value for model_name {args.model_name}!")
-            link_predictor = MergeLayer(input_dim1=node_raw_features.shape[1], input_dim2=node_raw_features.shape[1],
-                                        hidden_dim=node_raw_features.shape[1], output_dim=1)
-            model = nn.Sequential(dynamic_backbone, link_predictor)
-            logger.info(f'model -> {model}')
-            logger.info(f'model name: {args.model_name}, #parameters: {get_parameter_sizes(model) * 4} B, '
-                        f'{get_parameter_sizes(model) * 4 / 1024} KB, {get_parameter_sizes(model) * 4 / 1024 / 1024} MB.')
-
-            # load the saved model
-            load_model_folder = f"{args.experiment_folder}/{args.load_model_name}/saved_models/"
-            early_stopping = EarlyStopping(patience=0, save_model_folder=load_model_folder,
-                                           save_model_name=args.load_model_name, logger=logger, model_name=args.model_name)
-            early_stopping.load_checkpoint(model, map_location='cpu')
-
-            model = convert_to_gpu(model, device=args.device)
-
-            loss_func = nn.BCELoss()
-
-            # evaluate the best model
-            logger.info(f'get final performance on dataset {args.dataset_name}...')
-
-
-            test_losses, test_metrics, test_predicted_links, test_actual_links, non_exist_links = evaluate_model_link_prediction(model_name=args.model_name,
-                                                                            model=model,
-                                                                            neighbor_sampler=full_neighbor_sampler,
-                                                                            evaluate_idx_data_loader=test_idx_data_loader,
-                                                                            evaluate_neg_edge_sampler=test_neg_edge_sampler,
-                                                                            evaluate_data=test_data,
-                                                                            loss_func=loss_func,
-                                                                            num_neighbors=args.num_neighbors,
-                                                                            time_gap=args.time_gap,
-                                                                            full_return= True, temp=args.temperature)
-            timestamp_anomaly_result(test_predicted_links, test_actual_links, non_exist_links, validate = False, names = (args.dataset_name,args.model_name, args.temperature))
+    timestamp_anomaly_result(test_predicted_links, test_actual_links, non_exist_links, validate = False, names = (args.dataset_name,args.model_name, args.temperature))
