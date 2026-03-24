@@ -71,7 +71,7 @@ if __name__ == "__main__":
         help='whether or not include features '
     )
     
-    args = parser.parse_args()
+    args = parser.parse_known_args()[0]
 
     try:
         buser = BASE
@@ -95,7 +95,6 @@ if __name__ == "__main__":
         features_e = base + "feature_data/features_e.pkl"
         features_g = base + "feature_data/features_g.pkl"
         label_path = base + "label_data/malicious.json"
-
 
 
         task = args.task

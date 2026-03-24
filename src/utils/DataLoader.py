@@ -79,7 +79,7 @@ def get_link_prediction_data(dataset_name: str, val_start: float, test_start: fl
     edge_raw_features = np.load('data/processed_data/{}/ml_{}.npy'.format(dataset_name, dataset_name))
     node_raw_features = np.load('data/processed_data/{}/ml_{}_node.npy'.format(dataset_name, dataset_name))
 
-    NODE_FEAT_DIM = EDGE_FEAT_DIM = 378
+    NODE_FEAT_DIM = EDGE_FEAT_DIM = 172
     assert NODE_FEAT_DIM >= node_raw_features.shape[1], f'Node feature dimension in dataset {dataset_name} is bigger than {NODE_FEAT_DIM}!'
     assert EDGE_FEAT_DIM >= edge_raw_features.shape[1], f'Edge feature dimension in dataset {dataset_name} is bigger than {EDGE_FEAT_DIM}!'
     # padding the features of edges and nodes to the same dimension (172 for all the datasets)

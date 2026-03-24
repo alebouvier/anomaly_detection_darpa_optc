@@ -10,8 +10,7 @@ MODEL:
   SIMPLE_HARD_DEVICE: "C:"
   SPLIT_PATH_COMMAND_LINE: '"[^"]*"|\S+'
 
-  SELECTED_NODES: 
-    - "Process"
+  SELECTED_NODES: "Process"
   NODES_TYPES_ALL:
     - "Node"
     - "Process"

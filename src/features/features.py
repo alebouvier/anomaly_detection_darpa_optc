@@ -63,7 +63,7 @@ class Encoding_builder:
                 for k in set(enc_struc_e):
                     features_e[k] = [
                         np.array(
-                            enc_struc_e.get(k, []) + enc_process_e.get(k, [])
+                            enc_process_e.get(k, [])
                         ).astype(np.float32),
                         fe_b[k][0],
                     ]
@@ -121,6 +121,7 @@ class Encoding_builder:
                 + sid
                 + p_and_son_
             )
+            # print(len(features_e_g[node.id]))
 
             sids.append(node.sid)
             image_paths.append(image_path)
@@ -186,6 +187,7 @@ class Encoding_builder:
         #    )
         for k in fe_a.keys():
             features_e[k] = [x for d in (fe_a, fe_b, fe_c, fe_d) for x in d.get(k, [])]
+            # print(len(features_e[k]))
 
         return features_g, features_e, fe_b
 

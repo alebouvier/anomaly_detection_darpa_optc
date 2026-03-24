@@ -1,6 +1,7 @@
 from pathlib import Path
 import pandas as pd
 from datetime import datetime
+import datetime as dt
 from data.optc_utils import load_pickle_file
 import data.optc_graph_classes as graph_classes
 import json
@@ -35,8 +36,8 @@ class GraphProcessor:
         self._configure_dataset_settings()
         
         # Define split dates
-        self.val_start_date = datetime.date.strptime(start_val, "%Y-%m-%dT%H:%M").timestamp()
-        self.test_start_date = datetime.date.strptime(start_test, "%Y-%m-%dT%H:%M").timestamp()
+        self.val_start_date = dt.datetime.strptime(start_val, "%Y-%m-%dT%H:%M").timestamp()
+        self.test_start_date = dt.datetime.strptime(start_test, "%Y-%m-%dT%H:%M").timestamp()
 
     def _load_anomaly_ids(self):
         """Load anomaly IDs from JSON file."""
@@ -160,17 +161,17 @@ class GraphProcessor:
         return df_filtered
 
     def _add_features_columns(self, df):
-        base = "node_features/"
-        features_dim = 189
+        base = f"data/"
+        features_dim = 26
         
-        file_dict_path = base + "features_e.pkl"
+        file_dict_path = base + "feature_data/features_e.pkl"
         file_dict = load_pickle_file(file_dict_path)
 
         features_cache = {}
 
         src_features_list = []
         dest_features_list = []
-        valid_indices = []
+        zero_features = [0] * features_dim
 
         nb_not_found = 0
     
@@ -184,27 +185,32 @@ class GraphProcessor:
                 features_cache[timestamp] = load_pickle_file(features_file_path) 
             features_dict = features_cache[timestamp][timestamp]
 
-            # delete line if the nodes have no feature
-            if src_name not in features_dict or dest_name not in features_dict:
-                nb_not_found +=1
-                continue
+            # source node
+            if src_name in features_dict:
 
-            src_features = features_dict[src_name][0]
-            dest_features = features_dict[dest_name][0]
+                src_features = features_dict[src_name][0]
+            else:
+                src_features = zero_features
+                nb_not_found += 1
+
+            # destination node
+            if dest_name in features_dict:
+                dest_features = features_dict[dest_name][0]
+            else:
+                dest_features = zero_features
+                nb_not_found += 1
+
 
             src_features_list.append(src_features)
             dest_features_list.append(dest_features)
 
-            valid_indices.append(idx)
-        
-        df_filtered = df.iloc[valid_indices].reset_index(drop=True)
 
         src_features_df = pd.DataFrame(src_features_list, columns=[f"src_emb_{i}" for i in range(features_dim)])
         dest_features_df = pd.DataFrame(dest_features_list, columns=[f"dest_emb_{i}" for i in range(features_dim)])
 
         print(f"source features {src_features_df.shape}, destination features {dest_features_df.shape}")
-        print(f"{nb_not_found} rows removed")
-        df_final = pd.concat([df_filtered, src_features_df, dest_features_df], axis=1)
+        print(f"{nb_not_found} nodes without features")
+        df_final = pd.concat([df.reset_index(drop=True), src_features_df, dest_features_df], axis=1)
 
         return df_final
 
