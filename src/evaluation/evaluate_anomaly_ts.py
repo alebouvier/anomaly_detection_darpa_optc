@@ -28,6 +28,9 @@ from utils.load_configs import get_link_prediction_args
 _validation_thresholds = {}
 _roc_data = {}
 
+
+
+
 def group_links_by_timestamp(predicted_links, actual_links):
     """Group links by timestamp for evaluation."""
     timestamp_data = defaultdict(lambda: {'predicted': [], 'actual': []})
@@ -123,7 +126,7 @@ def evaluate_timestamp_detection(predicted_links, actual_links, method, threshol
     for data in timestamp_data.values():
         score = calculate_timestamp_score(data['predicted'], method)
         label = int(is_timestamp_anomalous(data['actual']))
-        prediction = int(score > threshold)
+        prediction = int(score >= threshold)
         
         scores.append(score)
         labels.append(label)
@@ -226,7 +229,7 @@ def create_threshold_distribution_plots(predicted_links, actual_links, names):
         plt.savefig(filename, dpi=300, bbox_inches='tight')
         plt.close()
         
-        print(f"  Distribution plot saved: {filename}")
+        logging.info(f"  Distribution plot saved: {filename}")
 
 def save_combined_roc_curve(names):
     """Save combined ROC curves for all methods."""
@@ -262,7 +265,7 @@ def save_combined_roc_curve(names):
     plt.savefig(filename, dpi=300, bbox_inches='tight')
     plt.close()
     
-    print(f"\n  Combined ROC curve saved: {filename}")
+    logging.info(f"\n  Combined ROC curve saved: {filename}")
     _roc_data.clear()
 
 def save_timestamp_details(predicted_links, actual_links, method, names):
@@ -311,23 +314,23 @@ def save_timestamp_details(predicted_links, actual_links, method, names):
             'details': details
         }, f, indent=2)
     
-    print(f"  Timestamp details saved: {filename}")
+    logging.info(f"  Timestamp details saved: {filename}")
 
 def print_results(results):
     """Print evaluation results."""
     cm = results['cm']
     metrics = results['metrics']
     
-    print(f"\n--- RESULTS (Threshold: {results['threshold']:.4f}, Method: {results['method']}) ---")
-    print(f"Confusion Matrix: TP={cm['TP']}, FN={cm['FN']}, FP={cm['FP']}, TN={cm['TN']}")
-    print(f"Metrics: Acc={metrics['accuracy']:.3f}, Prec={metrics['precision']:.3f}, Rec={metrics['recall']:.3f}, F1={metrics['f1']:.3f}")
-    print(f"Summary: {results['summary']['total']} timestamps ({results['summary']['anomalous']} anomalous)")
+    logging.info(f"\n--- RESULTS (Threshold: {results['threshold']:.4f}, Method: {results['method']}) ---")
+    logging.info(f"Confusion Matrix: TP={cm['TP']}, FN={cm['FN']}, FP={cm['FP']}, TN={cm['TN']}")
+    logging.info(f"Metrics: Acc={metrics['accuracy']:.3f}, Prec={metrics['precision']:.3f}, Rec={metrics['recall']:.3f}, F1={metrics['f1']:.3f}")
+    logging.info(f"Summary: {results['summary']['total']} timestamps ({results['summary']['anomalous']} anomalous)")
 
 def print_link_stats(stats):
     """Print link score statistics."""
-    print(f"\n--- LINK SCORE STATISTICS ---")
+    logging.info(f"\n--- LINK SCORE STATISTICS ---")
     for link_type, data in stats.items():
-        print(f"{link_type.capitalize()} links: Count={data['count']}, Mean={data['mean']:.4f}, Std={data['std']:.4f}")
+        logging.info(f"{link_type.capitalize()} links: Count={data['count']}, Mean={data['mean']:.4f}, Std={data['std']:.4f}")
 
 
 def timestamp_anomaly_result(predicted_links, actual_links, non_exist_links, validate, 
@@ -345,30 +348,31 @@ def timestamp_anomaly_result(predicted_links, actual_links, non_exist_links, val
     """
     global _validation_thresholds
 
-    print(f"\n{'='*80}")
-    print(f"TIMESTAMP ANOMALY DETECTION - {'VALIDATE' if validate else 'TEST'} {names}")
-    print(f"{'='*80}")
+    logging.info(f"\n{'='*80}")
+    logging.info(f"TIMESTAMP ANOMALY DETECTION - {'VALIDATE' if validate else 'TEST'} {names}")
+    logging.info(f"{'='*80}")
     
     # Calculate and print link statistics
     link_stats = calculate_link_statistics(predicted_links, actual_links, non_exist_links)
     print_link_stats(link_stats)
 
-    print("Logic: Timestamps with >=1 anomalous link are anomalous")
+    logging.info("Logic: Timestamps with >=1 anomalous link are anomalous")
     
     # Create distribution plots
     create_threshold_distribution_plots(predicted_links, actual_links, names)
+    calculate_edge_level_metrics(predicted_links, actual_links, names)
     
     # Evaluate each method
     for method in methods:
-        print(f"\n{'='*50}")
-        print(f"METHOD: {method.upper()}")
-        print(f"{'='*50}")
+        logging.info(f"\n{'='*50}")
+        logging.info(f"METHOD: {method.upper()}")
+        logging.info(f"{'='*50}")
         
-        roc_auc, avg_precision, best_th, best_f1_score = calculate_global_metrics(predicted_links, actual_links, method, validate, names)
+        roc_auc, avg_precision, best_th, best_f1_score = calculate_global_metrics(predicted_links, actual_links, method, names)
         save_timestamp_details(predicted_links, actual_links, method, names)
         _validation_thresholds[method] = best_th
         
-        print(f"\n--- THRESHOLD EVALUATION ---")
+        logging.info(f"\n--- THRESHOLD EVALUATION ---")
         results = evaluate_timestamp_detection(predicted_links, actual_links, method, best_th)
         
         print_results(results)
@@ -390,15 +394,14 @@ def calculate_global_metrics(predicted_links, actual_links, method, names):
     labels = [int(is_timestamp_anomalous(data['actual'])) for data in timestamp_data.values()]
     
     if len(set(labels)) <= 1:
-        print(f"\nGlobal metrics (method={method}): Cannot calculate (only one class)")
-        print(f"  Timestamps: {len(labels)}")
+        logging.info(f"\nGlobal metrics (method={method}): Cannot calculate (only one class)")
+        logging.info(f"  Timestamps: {len(labels)}")
         return None, None
     
+    roc_auc = roc_auc_score(labels, scores)
+    avg_precision = average_precision_score(labels, scores)
     
-    roc_auc = roc_auc_score(labels, inverted_scores)
-    avg_precision = average_precision_score(labels, inverted_scores)
-    
-    fpr, tpr, threshold = roc_curve(labels, inverted_scores)
+    fpr, tpr, threshold = roc_curve(labels, scores)
 
     # find threshold that maximize f1_score
     tp = tpr * labels.count(1)
@@ -410,16 +413,67 @@ def calculate_global_metrics(predicted_links, actual_links, method, names):
     best_th = threshold[best_th_idx]
     best_f1_score = f1_score[best_th_idx]
 
-    print(f"\nGlobal metrics (method={method}):")
-    print(f"  ROC AUC: {roc_auc:.3f}")
-    print(f"  Average Precision: {avg_precision:.3f}")
-    print(f"  F1-score: {best_f1_score}, maximized with threshold = {best_th}")
-    print(f"  Timestamps: {len(labels)} (normal: {labels.count(0)}, anomalous: {labels.count(1)})")
+    logging.info(f"\nGlobal metrics (method={method}):")
+    logging.info(f"  ROC AUC: {roc_auc:.3f}")
+    logging.info(f"  Average Precision: {avg_precision:.3f}")
+    logging.info(f"  F1-score: {best_f1_score}, maximized with threshold = {best_th}")
+    logging.info(f"  Timestamps: {len(labels)} (normal: {labels.count(0)}, anomalous: {labels.count(1)})")
+
+    return roc_auc, avg_precision, best_th, best_f1_score
+
+def calculate_edge_level_metrics(predicted_links, actual_links, names):
+    score_map = {(src, dst, ts): 1 - score for src, dst, score, ts in predicted_links}
+    
+    scores = []
+    labels = []
+
+    for src, dst, label, ts in actual_links:
+        if (src, dst, ts) in score_map:
+            scores.append(score_map[(src, dst, ts)])
+            labels.append(label)
+
+    roc_auc = roc_auc_score(labels, scores)
+    avg_precision = average_precision_score(labels, scores)
+    
+    fpr, tpr, threshold = roc_curve(labels, scores)
+
+    # find threshold that maximize f1_score
+    tp = tpr * labels.count(1)
+    fp = fpr * labels.count(0)
+    fn = (1-tpr) * labels.count(1)
+    tn = len(labels) - tp - fp - fn  
+    f1_score = 2 * tp / (2 * tp + fp + fn)
+
+    best_th_idx = np.argmax(f1_score)
+    best_th = threshold[best_th_idx]
+    best_f1_score = f1_score[best_th_idx]
+    best_tp = tp[best_th_idx]
+    best_fp = fp[best_th_idx]
+    best_fn = fn[best_th_idx]
+    best_tn = tn[best_th_idx]
+
+    logging.info(f"\Edge metrics :")
+    logging.info(f"  ROC AUC: {roc_auc:.6f}")
+    logging.info(f"  Average Precision: {avg_precision:.6f}")
+    logging.info(f"  F1-score: {best_f1_score:.6f}, maximized with threshold = {best_th:.6f}")
+    logging.info(f"  TP: {best_tp}, FP: {best_fp}, FN: {best_fn}, TN: {best_tn}")
+
+    logging.info(f"  Edges: {len(labels)} (normal: {labels.count(0)}, anomalous: {labels.count(1)})")
 
     return roc_auc, avg_precision, best_th, best_f1_score
 
 
+
 def main(args):
+    output_folder = f"experiments/{args.dataset_name}/{args.model_name}/ad_results"
+    create_folder(output_folder)
+
+    logging.basicConfig(
+        filename=f"{output_folder}/ad_results.log",
+        level=logging.INFO,
+        format="%(message)s"
+    )
+
     test_score_folder = f"data/test_result_data/{args.dataset_name}/{args.model_name}"
 
     test_predicted_links = load_pickle_file(f"{test_score_folder}/test_predicted_links.pkl")
