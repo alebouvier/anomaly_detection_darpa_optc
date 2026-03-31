@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #OAR -p nodeset NOT IN (abacus27) and gpudevice=0
-#OAR -l host=1,walltime=3:00:00
+#OAR -l host=1,walltime=4:00:00
 #OAR -O job_%jobid%.out
 #OAR -E job_%jobid%.err
 

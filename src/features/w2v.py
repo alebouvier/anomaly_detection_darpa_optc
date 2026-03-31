@@ -188,7 +188,6 @@ def eval_function_coeff_path_2combine(enc, last, h, k):
 
 
 def eval_function_coeff_path_decrois_geo(enc, last, h, k, ulast, q=0.1):
-    b = q
     if k < len(h) - last:
         res = (q * ulast) * enc
     else:
@@ -250,14 +249,13 @@ def main(
         for t in time_train:
             ft.extend(load_pickle_file(dataset[c][t]))
 
-
     mysentences = MySentences(ft, sampled_content_file, is_path=is_path, cfg=cfg)
 
     model = train_val(mysentences, cfg)
 
     if is_path:
-        model.save(base + f"/feature_data/w2v_model_path.pt")
+        model.save(base + "/feature_data/w2v_model_path.pt")
     else:
-        model.save(base + f"/feature_data/w2v_model_cmd.pt")
+        model.save(base + "/feature_data/w2v_model_cmd.pt")
 
     return

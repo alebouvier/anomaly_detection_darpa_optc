@@ -1,12 +1,6 @@
 import argparse
-import os
-import time
-import random
-import torch
-import numpy as np
-import psutil
 
-from utils.utils import analyze_graphs, BASE
+from utils.utils import BASE
 from utils.load_configs import get_link_prediction_args
 
 from preprocessing.graphs import main as building_graphs
@@ -66,11 +60,9 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        '--with_features',
-        action='store_true',
-        help='whether or not include features '
+        "--with_features", action="store_true", help="whether or not include features "
     )
-    
+
     args = parser.parse_known_args()[0]
 
     try:
@@ -87,7 +79,7 @@ if __name__ == "__main__":
         print("Selected clients: ", clients)
         start_val = args.start_val
         start_test = args.start_test
-        
+
         graphs = base + "graph_data/graphs.pkl"
         cmds = base + "feature_data/cmds.pkl"
         paths = base + "feature_data/paths.pkl"
@@ -96,10 +88,7 @@ if __name__ == "__main__":
         features_g = base + "feature_data/features_g.pkl"
         label_path = base + "label_data/malicious.json"
 
-
         task = args.task
-        if task == "parse":
-            parse_wget()
         if task == "graph":  # construction of all graphs
             building_graphs(base, clients, duration, logs, dataset)
 
@@ -115,7 +104,15 @@ if __name__ == "__main__":
                 dataset_name = f"optc_{client}"
                 input_path = base + f"graph_data/{dataset_name}/"
                 output_path = base + f"DG_data/{dataset_name}/{dataset_name}.csv"
-                graph_to_csv_preprocessor(client, input_path, output_path, label_path, start_val, start_test, args.with_features)
+                graph_to_csv_preprocessor(
+                    client,
+                    input_path,
+                    output_path,
+                    label_path,
+                    start_val,
+                    start_test,
+                    args.with_features,
+                )
                 ml_data_preprocessor(dataset_name, bipartite=False, node_feat_dim=25)
 
         elif task == "train_link_prediction":
@@ -123,9 +120,11 @@ if __name__ == "__main__":
             for client in clients:
                 train_link_prediction_args.dataset_name = f"optc_{client}"
                 training_link_prediction(train_link_prediction_args)
-            
+
         elif task == "validate_link_prediction":
-            validation_link_prediction_args = get_link_prediction_args(is_evaluation=True)
+            validation_link_prediction_args = get_link_prediction_args(
+                is_evaluation=True
+            )
             for client in clients:
                 validation_link_prediction_args.dataset_name = f"optc_{client}"
                 validate_link_prediction(validation_link_prediction_args)
@@ -153,9 +152,17 @@ if __name__ == "__main__":
                 dataset_name = f"optc_{client}"
                 input_path = base + f"graph_data/{dataset_name}/"
                 output_path = base + f"DG_data/{dataset_name}/{dataset_name}.csv"
-                graph_to_csv_preprocessor(client, input_path, output_path, label_path, start_val, start_test, args.with_features)
+                graph_to_csv_preprocessor(
+                    client,
+                    input_path,
+                    output_path,
+                    label_path,
+                    start_val,
+                    start_test,
+                    args.with_features,
+                )
                 ml_data_preprocessor(dataset_name, bipartite=False, node_feat_dim=25)
-        
+
         elif task == "complete":
             building_graphs(base, clients, duration, logs, dataset)
             training_w2v(base, clients, cmds, data=dataset, is_path=False)
@@ -166,14 +173,20 @@ if __name__ == "__main__":
                 dataset_name = f"optc_{client}"
                 input_path = base + f"graph_data/{dataset_name}/"
                 output_path = base + f"DG_data/{dataset_name}/{dataset_name}.csv"
-                graph_to_csv_preprocessor(client, input_path, output_path, label_path, start_val, start_test, args.with_features)
+                graph_to_csv_preprocessor(
+                    client,
+                    input_path,
+                    output_path,
+                    label_path,
+                    start_val,
+                    start_test,
+                    args.with_features,
+                )
                 ml_data_preprocessor(dataset_name, bipartite=False, node_feat_dim=25)
                 ML_args.dataset_name = f"optc_{client}"
                 training_link_prediction(ML_args)
                 validate_link_prediction(ML_args)
                 testing_anomaly_detection(ML_args)
-
-
 
     except Exception as e:
         print(f"Error {e}")

@@ -675,7 +675,7 @@ def extract_data(c, k, file, duration, base, metadata, node_dataset, cfg):
 
         for line in tqdm(f):
             ob = json.loads(line)
-            if start == None:  # Set the start of the first graph
+            if start is None:  # Set the start of the first graph
                 start = ob["timestamp"]
                 # print("Start: ", start)
                 if metadata:
@@ -700,15 +700,25 @@ def extract_data(c, k, file, duration, base, metadata, node_dataset, cfg):
                 if metadata:
                     save_pkl(
                         ob_graph.get_command_lines(),
-                        base + f"feature_data/optc_{c}/cmds/{c}_{duration}_{k}_{start}.pkl",
+                        base
+                        + f"feature_data/optc_{c}/cmds/{c}_{duration}_{k}_{start}.pkl",
                     )
                     save_pkl(
                         ob_graph.get_path(),
-                        base + f"feature_data/optc_{c}/paths/{c}_{duration}_{k}_{start}.pkl",
+                        base
+                        + f"feature_data/optc_{c}/paths/{c}_{duration}_{k}_{start}.pkl",
                     )
-                    cmds[start] = base + f"feature_data/optc_{c}/cmds/{c}_{duration}_{k}_{start}.pkl"
-                    paths[start] = base + f"feature_data/optc_{c}/paths/{c}_{duration}_{k}_{start}.pkl"
-                graphs[start] = base + f"graph_data/optc_{c}/{c}_{duration}_{k}_{start}.pkl"
+                    cmds[start] = (
+                        base
+                        + f"feature_data/optc_{c}/cmds/{c}_{duration}_{k}_{start}.pkl"
+                    )
+                    paths[start] = (
+                        base
+                        + f"feature_data/optc_{c}/paths/{c}_{duration}_{k}_{start}.pkl"
+                    )
+                graphs[start] = (
+                    base + f"graph_data/optc_{c}/{c}_{duration}_{k}_{start}.pkl"
+                )
                 del ob_graph
 
                 # Start a new graph
@@ -733,10 +743,15 @@ def extract_data(c, k, file, duration, base, metadata, node_dataset, cfg):
                 )
                 save_pkl(
                     ob_graph.get_path(),
-                    base + f"feature_data/optc_{c}/paths/{c}_{duration}_{k}_{start}.pkl",
+                    base
+                    + f"feature_data/optc_{c}/paths/{c}_{duration}_{k}_{start}.pkl",
                 )
-                cmds[start] = base + f"feature_data/optc_{c}/cmds/{c}_{duration}_{k}_{start}.pkl"
-                paths[start] = base + f"feature_data/optc_{c}/paths/{c}_{duration}_{k}_{start}.pkl"
+                cmds[start] = (
+                    base + f"feature_data/optc_{c}/cmds/{c}_{duration}_{k}_{start}.pkl"
+                )
+                paths[start] = (
+                    base + f"feature_data/optc_{c}/paths/{c}_{duration}_{k}_{start}.pkl"
+                )
             graphs[start] = base + f"graph_data/optc_{c}/{c}_{duration}_{k}_{start}.pkl"
             del ob_graph
         return graphs, cmds, paths
@@ -770,9 +785,9 @@ def main(base, clients, duration, logs, dataset):
                 cmds[c].update(cmds_)
                 paths[c].update(paths_)
 
-    save_pkl(graphs, base + f"graph_data/graphs.pkl")
+    save_pkl(graphs, base + "graph_data/graphs.pkl")
     if metadata:
-        save_pkl(cmds, base + f"feature_data/cmds.pkl")
-        save_pkl(paths, base + f"feature_data/paths.pkl")
+        save_pkl(cmds, base + "feature_data/cmds.pkl")
+        save_pkl(paths, base + "feature_data/paths.pkl")
     print("End task graph")
     return

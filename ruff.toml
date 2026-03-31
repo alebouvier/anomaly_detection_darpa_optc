@@ -1,0 +1,6 @@
+# Support Python 3.11+.
+target-version = "py311"
+
+
+[lint.pydocstyle]
+convention = "google"

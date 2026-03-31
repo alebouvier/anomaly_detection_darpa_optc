@@ -8,7 +8,7 @@ import re
 import traceback
 import pandas as pd
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 from matplotlib import pyplot as plt
 import matplotlib.dates as mdates
 import numpy as np
@@ -20,12 +20,12 @@ from sklearn.metrics import (
     precision_recall_curve,
     roc_auc_score,
     roc_curve,
-    accuracy_score, 
+    accuracy_score,
 )
 import seaborn as sns
+
 # import config_optc
 from tqdm import tqdm
-from sklearn.metrics import silhouette_score
 # import pacmap
 # import hdbscan
 
@@ -127,7 +127,7 @@ def save_pkl(data, file):
 
 
 def load_pickle_file(file_path):
-    #print(file_path)
+    # print(file_path)
     try:
         with open(file_path, "rb") as f:
             # print("ok")
@@ -258,6 +258,7 @@ def get_test_files(folder):
             test_files = [f"{root}/{file}" for file in sorted(files)]
     return test_files
 
+
 """
 # W2V#############################
 def load_word2vec_model(file):
@@ -268,7 +269,8 @@ def load_word2vec_model(file):
     except Exception as e:
         print(f"Error {e}")
         exit(1)
-""" 
+"""
+
 
 def plot_sim(folder, x, y):
 
@@ -289,7 +291,7 @@ def plot_sim(folder, x, y):
     plt.xlabel("Pairs")
     plt.grid()
     plt.ylabel("Similarity score")
-    plt.title(f"Similarity evaluation")
+    plt.title("Similarity evaluation")
     plt.legend()
     plt.savefig(folder + "sim.png")
     plt.close()
@@ -369,6 +371,7 @@ def pvalue_matrix_kendall(df, fonc):
 
     return 0
 
+
 """
 def pacmac_cluser(data, sentence, labels1, labels2, folder, nb_dim):
 
@@ -387,6 +390,7 @@ def pacmac_cluser(data, sentence, labels1, labels2, folder, nb_dim):
     # folder = folder.replace("node", "action")
     pacmac_plot(X_transformed, labels, folder, sentence)
 """
+
 
 def pacmac_plot(X_embedded, labels, folder, sentence):
     da = {
@@ -530,13 +534,13 @@ def plot_auc(folder, auc, fpr, tpr, best_th, th_tpr, th_fpr, acc, client=None):
     )
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
-    plt.title(f"ROC Curve result")
+    plt.title("ROC Curve result")
     plt.legend()
     if client is not None:
         create_folder(folder + "/roc")
         plt.savefig(folder + f"/roc/{client}_roc.png")
     else:
-        plt.savefig(folder + f"roc.png")
+        plt.savefig(folder + "roc.png")
     plt.close()
 
 
@@ -544,12 +548,12 @@ def plot_prc(folder, auc, rec, prec, client=None):
     plt.plot(rec, prec, label=f"AUC = {auc}")
     plt.xlabel("Precision")
     plt.ylabel("Recall")
-    plt.title(f"Precision Recall Curve result")
+    plt.title("Precision Recall Curve result")
     plt.legend()
     if client is not None:
         plt.savefig(folder + f"roc/{client}_prc.png")
     else:
-        plt.savefig(folder + f"prc.png")
+        plt.savefig(folder + "prc.png")
     plt.close()
 
 
@@ -681,10 +685,11 @@ def plot_timelapse(folder, clients, f_name, loss, pred, duration):
         exit(1)
 
     # Afficher le graphique
-    print(folder + f"timelapse_our.png")
-    plt.savefig(folder + f"timelapse_our.png", dpi=300, bbox_inches="tight")
+    print(folder + "timelapse_our.png")
+    plt.savefig(folder + "timelapse_our.png", dpi=300, bbox_inches="tight")
     plt.close()
     return 0
+
 
 # ENCODING######################################################""
 def encoding_parent_son(lst, pipw, ipw):
@@ -907,7 +912,7 @@ class Autoencoder(nn.Module):
                 train_loss += loss.item()
             train_losses.append(train_loss / len(train_loader))
             print(
-                f"Epoch {epoch+1}/{num_epochs}, Train Loss: {train_loss / len(train_loader):.4f}"
+                f"Epoch {epoch + 1}/{num_epochs}, Train Loss: {train_loss / len(train_loader):.4f}"
             )
 
             self.eval()
@@ -924,7 +929,7 @@ class Autoencoder(nn.Module):
                     val_loss += loss
                 val_losses.append(val_loss / len(val_loader))
                 print(
-                    f"Epoch {epoch+1}/{num_epochs}, Val Loss: {val_loss / len(val_loader):.4f}"
+                    f"Epoch {epoch + 1}/{num_epochs}, Val Loss: {val_loss / len(val_loader):.4f}"
                 )
             val_loss_tot = val_loss
 

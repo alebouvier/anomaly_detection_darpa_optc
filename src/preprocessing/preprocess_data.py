@@ -1,9 +1,6 @@
 import numpy as np
 import pandas as pd
-from pathlib import Path
-import argparse
 from pandas.testing import assert_frame_equal
-from distutils.dir_util import copy_tree
 from utils.utils import create_folder
 
 
@@ -19,10 +16,10 @@ def preprocess(dataset_name: str):
 
     with open(dataset_name) as f:
         # skip the first line
-        s = next(f)
+        next(f)
         previous_time = -1
         for idx, line in enumerate(f):
-            e = line.strip().split(',')
+            e = line.strip().split(",")
             # user_id
             u = int(e[0])
             # item_id
@@ -47,11 +44,9 @@ def preprocess(dataset_name: str):
             idx_list.append(idx)
 
             feat_l.append(feat)
-    return pd.DataFrame({'u': u_list,
-                         'i': i_list,
-                         'ts': ts_list,
-                         'label': label_list,
-                         'idx': idx_list}), np.array(feat_l)
+    return pd.DataFrame(
+        {"u": u_list, "i": i_list, "ts": ts_list, "label": label_list, "idx": idx_list}
+    ), np.array(feat_l)
 
 
 def reindex(df: pd.DataFrame, bipartite: bool = True):
@@ -64,8 +59,8 @@ def reindex(df: pd.DataFrame, bipartite: bool = True):
     new_df = df.copy()
     if bipartite:
         # check the ids of users and items
-        assert (df.u.max() - df.u.min() + 1 == len(df.u.unique()))
-        assert (df.i.max() - df.i.min() + 1 == len(df.i.unique()))
+        assert df.u.max() - df.u.min() + 1 == len(df.u.unique())
+        assert df.i.max() - df.i.min() + 1 == len(df.i.unique())
         assert df.u.min() == df.i.min() == 0
 
         # if bipartite, discriminate the source and target node by unique ids (target node id is counted based on source node id)
@@ -82,7 +77,9 @@ def reindex(df: pd.DataFrame, bipartite: bool = True):
     return new_df
 
 
-def preprocess_data(dataset_name: str, bipartite: bool = True, node_feat_dim: int = 172):
+def preprocess_data(
+    dataset_name: str, bipartite: bool = True, node_feat_dim: int = 378
+):
     """
     preprocess the data
     :param dataset_name: str, dataset name
@@ -91,10 +88,12 @@ def preprocess_data(dataset_name: str, bipartite: bool = True, node_feat_dim: in
     :return:
     """
     # Path("../processed_data/{}/".format(dataset_name)).mkdir(parents=True, exist_ok=True)
-    PATH = 'data/DG_data/{}/{}.csv'.format(dataset_name, dataset_name)
-    OUT_DF = 'data/processed_data/{}/ml_{}.csv'.format(dataset_name, dataset_name)
-    OUT_FEAT = 'data/processed_data/{}/ml_{}.npy'.format(dataset_name, dataset_name)
-    OUT_NODE_FEAT = 'data/processed_data/{}/ml_{}_node.npy'.format(dataset_name, dataset_name)
+    PATH = "data/DG_data/{}/{}.csv".format(dataset_name, dataset_name)
+    OUT_DF = "data/processed_data/{}/ml_{}.csv".format(dataset_name, dataset_name)
+    OUT_FEAT = "data/processed_data/{}/ml_{}.npy".format(dataset_name, dataset_name)
+    OUT_NODE_FEAT = "data/processed_data/{}/ml_{}_node.npy".format(
+        dataset_name, dataset_name
+    )
 
     df, edge_feats = preprocess(PATH)
     new_df = reindex(df, bipartite)
@@ -108,12 +107,12 @@ def preprocess_data(dataset_name: str, bipartite: bool = True, node_feat_dim: in
     max_idx = max(new_df.u.max(), new_df.i.max())
     node_feats = np.zeros((max_idx + 1, node_feat_dim))
 
-    print('number of nodes ', node_feats.shape[0] - 1)
-    print('number of node features ', node_feats.shape[1])
-    print('number of edges ', edge_feats.shape[0] - 1)
-    print('number of edge features ', edge_feats.shape[1])
-    
-    create_folder(f'data/processed_data/{dataset_name}/')
+    print("number of nodes ", node_feats.shape[0] - 1)
+    print("number of node features ", node_feats.shape[1])
+    print("number of edges ", edge_feats.shape[0] - 1)
+    print("number of edge features ", edge_feats.shape[1])
+
+    create_folder(f"data/processed_data/{dataset_name}/")
     new_df.to_csv(OUT_DF)  # edge-list
     np.save(OUT_FEAT, edge_feats)  # edge features
     np.save(OUT_NODE_FEAT, node_feats)  # node features
@@ -126,14 +125,18 @@ def check_data(dataset_name: str):
     :return:
     """
     # original data paths
-    origin_OUT_DF = '../DG_data/{}/ml_{}.csv'.format(dataset_name, dataset_name)
-    origin_OUT_FEAT = '../DG_data/{}/ml_{}.npy'.format(dataset_name, dataset_name)
-    origin_OUT_NODE_FEAT = '../DG_data/{}/ml_{}_node.npy'.format(dataset_name, dataset_name)
+    origin_OUT_DF = "../DG_data/{}/ml_{}.csv".format(dataset_name, dataset_name)
+    origin_OUT_FEAT = "../DG_data/{}/ml_{}.npy".format(dataset_name, dataset_name)
+    origin_OUT_NODE_FEAT = "../DG_data/{}/ml_{}_node.npy".format(
+        dataset_name, dataset_name
+    )
 
     # processed data paths
-    OUT_DF = '../processed_data/{}/ml_{}.csv'.format(dataset_name, dataset_name)
-    OUT_FEAT = '../processed_data/{}/ml_{}.npy'.format(dataset_name, dataset_name)
-    OUT_NODE_FEAT = '../processed_data/{}/ml_{}_node.npy'.format(dataset_name, dataset_name)
+    OUT_DF = "../processed_data/{}/ml_{}.csv".format(dataset_name, dataset_name)
+    OUT_FEAT = "../processed_data/{}/ml_{}.npy".format(dataset_name, dataset_name)
+    OUT_NODE_FEAT = "../processed_data/{}/ml_{}_node.npy".format(
+        dataset_name, dataset_name
+    )
 
     # Load original data
     origin_g_df = pd.read_csv(origin_OUT_DF)
@@ -147,16 +150,25 @@ def check_data(dataset_name: str):
 
     assert_frame_equal(origin_g_df, g_df)
     # check numbers of edges and edge features
-    assert origin_e_feat.shape == e_feat.shape and origin_e_feat.max() == e_feat.max() and origin_e_feat.min() == e_feat.min()
+    assert (
+        origin_e_feat.shape == e_feat.shape
+        and origin_e_feat.max() == e_feat.max()
+        and origin_e_feat.min() == e_feat.min()
+    )
     # check numbers of nodes and node features
-    assert origin_n_feat.shape == n_feat.shape and origin_n_feat.max() == n_feat.max() and origin_n_feat.min() == n_feat.min()
+    assert (
+        origin_n_feat.shape == n_feat.shape
+        and origin_n_feat.max() == n_feat.max()
+        and origin_n_feat.min() == n_feat.min()
+    )
+
 
 # parser = argparse.ArgumentParser('Interface for preprocessing datasets')
 # parser.add_argument('--dataset_name', type=str,
 #                     choices=['wikipedia', 'reddit', 'mooc', 'lastfm', 'myket', 'enron', 'SocialEvo', 'uci',
 #                              'Flights', 'CanParl', 'USLegis', 'UNtrade', 'UNvote', 'Contacts','optc_051','optc_201'],
 #                     help='Dataset name', default='wikipedia')
-# parser.add_argument('--node_feat_dim', type=int, default=172, help='Number of node raw features')
+# parser.add_argument('--node_feat_dim', type=int, default=378, help='Number of node raw features')
 
 # args = parser.parse_args()
 
@@ -176,6 +188,7 @@ def check_data(dataset_name: str):
 #     # if args.dataset_name not in ['myket']:
 #     #     check_data(args.dataset_name)
 #     # print(f'{args.dataset_name} passes the checks successfully.')
+
 
 def main(dataset_name, bipartite, node_feat_dim):
     preprocess_data(dataset_name, bipartite, node_feat_dim)

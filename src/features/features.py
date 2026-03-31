@@ -62,9 +62,7 @@ class Encoding_builder:
                 features_e = {}
                 for k in set(enc_struc_e):
                     features_e[k] = [
-                        np.array(
-                            enc_process_e.get(k, [])
-                        ).astype(np.float32),
+                        np.array(enc_struc_e.get(k, []) + enc_process_e.get(k, [])).astype(np.float32),
                         fe_b[k][0],
                     ]
             else:
@@ -367,7 +365,6 @@ def main(base, clients, graphs, model_w2v_path, dataset, g=False, e=False):
     features_g, features_e = {c: {} for c in clients}, {c: {} for c in clients}
 
     metadata = True
-
 
     data = load_pickle_file(graphs)
 
