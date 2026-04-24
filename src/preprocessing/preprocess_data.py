@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from pandas.testing import assert_frame_equal
-from utils.utils import create_folder
+from utils.utils import create_folder, BASE
 
 
 def preprocess(dataset_name: str):
@@ -88,12 +88,10 @@ def preprocess_data(
     :return:
     """
     # Path("../processed_data/{}/".format(dataset_name)).mkdir(parents=True, exist_ok=True)
-    PATH = "data/DG_data/{}/{}.csv".format(dataset_name, dataset_name)
-    OUT_DF = "data/processed_data/{}/ml_{}.csv".format(dataset_name, dataset_name)
-    OUT_FEAT = "data/processed_data/{}/ml_{}.npy".format(dataset_name, dataset_name)
-    OUT_NODE_FEAT = "data/processed_data/{}/ml_{}_node.npy".format(
-        dataset_name, dataset_name
-    )
+    PATH = f"{BASE}/DG_data/{dataset_name}/{dataset_name}.csv"
+    OUT_DF = f"{BASE}/processed_data/{dataset_name}/ml_{dataset_name}.csv"
+    OUT_FEAT = f"{BASE}/processed_data/{dataset_name}/ml_{dataset_name}.npy"
+    OUT_NODE_FEAT = f"{BASE}/processed_data/{dataset_name}/ml_{dataset_name}_node.npy"
 
     df, edge_feats = preprocess(PATH)
     new_df = reindex(df, bipartite)
@@ -112,7 +110,7 @@ def preprocess_data(
     print("number of edges ", edge_feats.shape[0] - 1)
     print("number of edge features ", edge_feats.shape[1])
 
-    create_folder(f"data/processed_data/{dataset_name}/")
+    create_folder(f"{BASE}/processed_data/{dataset_name}/")
     new_df.to_csv(OUT_DF)  # edge-list
     np.save(OUT_FEAT, edge_feats)  # edge features
     np.save(OUT_NODE_FEAT, node_feats)  # node features
@@ -125,18 +123,15 @@ def check_data(dataset_name: str):
     :return:
     """
     # original data paths
-    origin_OUT_DF = "../DG_data/{}/ml_{}.csv".format(dataset_name, dataset_name)
-    origin_OUT_FEAT = "../DG_data/{}/ml_{}.npy".format(dataset_name, dataset_name)
-    origin_OUT_NODE_FEAT = "../DG_data/{}/ml_{}_node.npy".format(
-        dataset_name, dataset_name
-    )
+    origin_OUT_DF = f"{BASE}/DG_data/{dataset_name}/ml_{dataset_name}.csv"
+    origin_OUT_FEAT = f"{BASE}/DG_data/{dataset_name}/ml_{dataset_name}.npy"
+    origin_OUT_NODE_FEAT = f"{BASE}/DG_data/{dataset_name}/ml_{dataset_name}_node.npy"
 
     # processed data paths
-    OUT_DF = "../processed_data/{}/ml_{}.csv".format(dataset_name, dataset_name)
-    OUT_FEAT = "../processed_data/{}/ml_{}.npy".format(dataset_name, dataset_name)
-    OUT_NODE_FEAT = "../processed_data/{}/ml_{}_node.npy".format(
-        dataset_name, dataset_name
-    )
+    OUT_DF = f"{BASE}/processed_data/{dataset_name}/ml_{dataset_name}.csv"
+    OUT_FEAT = f"{BASE}/processed_data/{dataset_name}/ml_{dataset_name}.npy"
+    OUT_NODE_FEAT = f"{BASE}/processed_data/{dataset_name}/ml_{dataset_name}_node.npy"
+    
 
     # Load original data
     origin_g_df = pd.read_csv(origin_OUT_DF)

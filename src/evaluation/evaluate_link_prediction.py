@@ -19,7 +19,7 @@ from utils.utils import (
     create_folder,
     save_pkl,
 )
-from utils.utils import get_neighbor_sampler, NegativeEdgeSampler
+from utils.utils import get_neighbor_sampler, NegativeEdgeSampler, BASE
 from evaluation.evaluate_models_utils import (
     evaluate_model_link_prediction,
     evaluate_edge_bank_link_prediction,
@@ -329,7 +329,7 @@ def main(args):
                 temp=args.temperature,
             )
             test_score_folder = (
-                f"data/test_result_data/{args.dataset_name}/{args.model_name}"
+                f"{BASE}/test_result_data/{args.dataset_name}/{args.model_name}"
             )
             create_folder(test_score_folder)
             save_pkl(

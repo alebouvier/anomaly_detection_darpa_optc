@@ -25,7 +25,7 @@ from utils.utils import (
     create_optimizer,
     create_folder,
 )
-from utils.utils import get_neighbor_sampler, NegativeEdgeSampler
+from utils.utils import get_neighbor_sampler, NegativeEdgeSampler, BASE
 from evaluation.evaluate_models_utils import evaluate_model_link_prediction
 from utils.metrics import get_link_prediction_metrics
 from utils.DataLoader import get_idx_data_loader, get_link_prediction_data

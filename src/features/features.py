@@ -5,7 +5,7 @@ import networkx as nx
 import numpy as np
 from tqdm import tqdm
 
-from features.bert import eval_for_encoding
+from features.w2v import eval_for_encoding
 
 from transformers import BertTokenizerFast, BertModel
 
@@ -16,6 +16,7 @@ from utils.utils import (
     load_word2vec_model,
     save_pkl,
     open_config,
+    BASE,
 )
 
 
@@ -361,7 +362,7 @@ class Encoding_builder:
         return f"Graph {self.g}."
 
 
-def main(base, clients, graphs, model_w2v_path, dataset, g=False, e=False):
+def main( clients, graphs, model_w2v_path, dataset, g=False, e=False):
     utils_dataset = importlib.import_module(f"data.{dataset}_utils")
     cfg_dataset = open_config(dataset)
 
@@ -381,18 +382,18 @@ def main(base, clients, graphs, model_w2v_path, dataset, g=False, e=False):
 
             save_pkl(
                 {d: e_g},
-                base + f"feature_data/optc_{c}/features/{c}_{d}_g.pkl",
+                BASE + f"feature_data/optc_{c}/features/{c}_{d}_g.pkl",
             )
             save_pkl(
                 {d: e_e},
-                base + f"feature_data/optc_{c}/features/{c}_{d}_e.pkl",
+                BASE + f"feature_data/optc_{c}/features/{c}_{d}_e.pkl",
             )
             features_g[c][d] = f"feature_data/optc_{c}/features/{c}_{d}_g.pkl"
             features_e[c][d] = f"feature_data/optc_{c}/features/{c}_{d}_e.pkl"
             del G, e, e_g, e_e
             gc.collect()
 
-    save_pkl(features_g, base + "/feature_data/features_g.pkl")
-    save_pkl(features_e, base + "/feature_data/features_e.pkl")
+    save_pkl(features_g, BASE + "/feature_data/features_g.pkl")
+    save_pkl(features_e, BASE + "/feature_data/features_e.pkl")
 
     return

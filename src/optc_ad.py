@@ -66,44 +66,41 @@ if __name__ == "__main__":
     args = parser.parse_known_args()[0]
 
     try:
-        buser = BASE
-        print(buser)
         dataset = "optc"
         print("Dataset: ", dataset)
-        logs = buser + "log_data"
+        logs = f"{BASE}/log_data"
         duration = args.duration
         print("Selected duration: ", duration)
         clients = args.clients
         nb = len(clients)
-        base = buser
         print("Selected clients: ", clients)
         start_val = args.start_val
         start_test = args.start_test
 
-        graphs = base + "graph_data/graphs.pkl"
-        cmds = base + "feature_data/cmds.pkl"
-        paths = base + "feature_data/paths.pkl"
-        model_w2v_path = base + "feature_data/w2v_model_path.pt"
-        features_e = base + "feature_data/features_e.pkl"
-        features_g = base + "feature_data/features_g.pkl"
-        label_path = base + "/home/albouvie/tmp/malicious.json"
+        graphs = f"{BASE}/graph_data/graphs.pkl"
+        cmds = f"{BASE}/feature_data/cmds.pkl"
+        paths = f"{BASE}/feature_data/paths.pkl"
+        model_w2v_path = f"{BASE}/feature_data/w2v_model_path.pt"
+        features_e = f"{BASE}/feature_data/features_e.pkl"
+        features_g = f"{BASE}/feature_data/features_g.pkl"
+        label_path = f"{BASE}/label_data/malicious.json"
 
         task = args.task
         if task == "graph":  # construction of all graphs
-            building_graphs(base, clients, duration, logs, dataset)
+            building_graphs(clients, duration, logs, dataset)
 
         elif task == "w2v":  # extraction of features
-            training_w2v(base, clients, cmds, data=dataset, is_path=False)
-            training_w2v(base, clients, paths, data=dataset)
+            training_w2v(clients, cmds, data=dataset, is_path=False)
+            training_w2v(clients, paths, data=dataset)
 
         elif task == "feature":  # extraction of features
-            extract_features(base, clients, graphs, model_w2v_path, dataset)
+            extract_features(BASE, clients, graphs, model_w2v_path, dataset)
 
         elif task == "preprocessing":
             for client in clients:
                 dataset_name = f"optc_{client}"
-                input_path = base + f"graph_data/{dataset_name}/"
-                output_path = base + f"DG_data/{dataset_name}/{dataset_name}.csv"
+                input_path = f"{BASE}/graph_data/{dataset_name}/"
+                output_path = f"{BASE}/DG_data/{dataset_name}/{dataset_name}.csv"
                 graph_to_csv_preprocessor(
                     client,
                     input_path,
@@ -144,14 +141,14 @@ if __name__ == "__main__":
                 testing_anomaly_detection(ML_args)
 
         elif task == "all_preprocessing":
-            building_graphs(base, clients, duration, logs, dataset)
-            training_w2v(base, clients, cmds, data=dataset, is_path=False)
-            training_w2v(base, clients, paths, data=dataset)
-            extract_features(base, clients, graphs, model_w2v_path, dataset)
+            building_graphs( clients, duration, logs, dataset)
+            training_w2v(clients, cmds, data=dataset, is_path=False)
+            training_w2v(clients, paths, data=dataset)
+            extract_features(clients, graphs, model_w2v_path, dataset)
             for client in clients:
                 dataset_name = f"optc_{client}"
-                input_path = base + f"graph_data/{dataset_name}/"
-                output_path = base + f"DG_data/{dataset_name}/{dataset_name}.csv"
+                input_path = f"{BASE}/graph_data/{dataset_name}/"
+                output_path = f"{BASE}/DG_data/{dataset_name}/{dataset_name}.csv"
                 graph_to_csv_preprocessor(
                     client,
                     input_path,
@@ -164,15 +161,15 @@ if __name__ == "__main__":
                 ml_data_preprocessor(dataset_name, bipartite=False, node_feat_dim=25)
 
         elif task == "complete":
-            building_graphs(base, clients, duration, logs, dataset)
-            training_w2v(base, clients, cmds, data=dataset, is_path=False)
-            training_w2v(base, clients, paths, data=dataset)
-            extract_features(base, clients, graphs, model_w2v_path, dataset)
+            building_graphs( clients, duration, logs, dataset)
+            training_w2v(clients, cmds, data=dataset, is_path=False)
+            training_w2v(clients, paths, data=dataset)
+            extract_features(clients, graphs, model_w2v_path, dataset)
             ML_args = get_link_prediction_args(is_evaluation=False)
             for client in clients:
                 dataset_name = f"optc_{client}"
-                input_path = base + f"graph_data/{dataset_name}/"
-                output_path = base + f"DG_data/{dataset_name}/{dataset_name}.csv"
+                input_path = f"{BASE}/graph_data/{dataset_name}/"
+                output_path = f"{BASE}/DG_data/{dataset_name}/{dataset_name}.csv"
                 graph_to_csv_preprocessor(
                     client,
                     input_path,

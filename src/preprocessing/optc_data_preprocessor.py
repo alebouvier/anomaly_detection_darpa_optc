@@ -8,7 +8,7 @@ import json
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import argparse
-from utils.utils import create_folder
+from utils.utils import create_folder, BASE
 
 
 class GraphProcessor:
@@ -186,7 +186,7 @@ class GraphProcessor:
         return df_filtered
 
     def _add_features_columns(self, df):
-        base = "data/"
+        base = BASE
 
         file_dict_path = base + "feature_data/features_e.pkl"
         file_dict = load_pickle_file(file_dict_path)
@@ -514,7 +514,7 @@ class GraphProcessor:
         Path(self.csv_output_path).parent.mkdir(parents=True, exist_ok=True)
 
         # Save CSV
-        create_folder(f"data/DG_data/optc_{self.host}")
+        create_folder(f"{BASE}/DG_data/optc_{self.host}")
         df.to_csv(self.csv_output_path, index=False)
         print(f"CSV created: {self.csv_output_path} with {len(df)} edges")
 

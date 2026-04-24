@@ -10,7 +10,7 @@ from sklearn.metrics import (
 )
 from collections import defaultdict
 
-from utils.utils import create_folder, load_pickle_file
+from utils.utils import create_folder, load_pickle_file, BASE
 
 # Global variables for validation data
 _validation_thresholds = {}
@@ -555,7 +555,7 @@ def main(args):
         format="%(message)s",
     )
 
-    test_score_folder = f"data/test_result_data/{args.dataset_name}/{args.model_name}"
+    test_score_folder = f"{BASE}/test_result_data/{args.dataset_name}/{args.model_name}"
 
     test_predicted_links = load_pickle_file(
         f"{test_score_folder}/test_predicted_links.pkl"

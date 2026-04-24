@@ -6,7 +6,9 @@ import traceback
 import networkx as nx
 from tqdm import tqdm
 
-from utils.utils import period, round_duration, save_pkl, open_config
+from utils.utils import period, round_duration, save_pkl, open_config, BASE
+
+
 
 
 class Graph_builder:
@@ -762,7 +764,7 @@ def extract_data(c, k, file, duration, base, metadata, node_dataset, cfg):
         exit(1)
 
 
-def main(base, clients, duration, logs, dataset):
+def main( clients, duration, logs, dataset):
     print("Start task graph")
     utils_dataset = importlib.import_module(f"data.{dataset}_utils")
     node_dataset = importlib.import_module(f"data.{dataset}_graph_classes")
@@ -778,16 +780,16 @@ def main(base, clients, duration, logs, dataset):
         print(data)
         for k, d in enumerate(data):
             graphs_, cmds_, paths_ = extract_data(
-                c, k, d, duration, base, metadata, node_dataset, cfg
+                c, k, d, duration, BASE, metadata, node_dataset, cfg
             )
             graphs[c].update(graphs_)
             if metadata:
                 cmds[c].update(cmds_)
                 paths[c].update(paths_)
 
-    save_pkl(graphs, base + "graph_data/graphs.pkl")
+    save_pkl(graphs, BASE + "graph_data/graphs.pkl")
     if metadata:
-        save_pkl(cmds, base + "feature_data/cmds.pkl")
-        save_pkl(paths, base + "feature_data/paths.pkl")
+        save_pkl(cmds, BASE + "feature_data/cmds.pkl")
+        save_pkl(paths, BASE + "feature_data/paths.pkl")
     print("End task graph")
     return

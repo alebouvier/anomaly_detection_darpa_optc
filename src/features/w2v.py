@@ -8,7 +8,7 @@ import gensim
 import numpy as np
 from tqdm import tqdm
 
-from utils.utils import load_pickle_file, open_config
+from utils.utils import load_pickle_file, open_config, BASE
 
 
 class MySentences(object):
@@ -237,8 +237,7 @@ def eval(model, data, is_command, cfg, f="const", q=0.1):
     return model, np.mean(np.array(lst), axis=0), data[2], data[3], data[4], h
 
 
-def main(
-    base, clients, dataset, data, is_path=True, batch=64, sampled_content_file=0.01
+def main( clients, dataset, data, is_path=True, batch=64, sampled_content_file=0.01
 ):
     cfg = open_config(data)
     utils_dataset = importlib.import_module(f"data.{data}_utils")
@@ -254,8 +253,8 @@ def main(
     model = train_val(mysentences, cfg)
 
     if is_path:
-        model.save(base + "/feature_data/w2v_model_path.pt")
+        model.save(BASE + "/feature_data/w2v_model_path.pt")
     else:
-        model.save(base + "/feature_data/w2v_model_cmd.pt")
+        model.save(BASE + "/feature_data/w2v_model_cmd.pt")
 
     return
