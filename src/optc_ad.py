@@ -86,7 +86,7 @@ if __name__ == "__main__":
         model_w2v_path = base + "feature_data/w2v_model_path.pt"
         features_e = base + "feature_data/features_e.pkl"
         features_g = base + "feature_data/features_g.pkl"
-        label_path = base + "label_data/malicious.json"
+        label_path = base + "/home/albouvie/tmp/malicious.json"
 
         task = args.task
         if task == "graph":  # construction of all graphs

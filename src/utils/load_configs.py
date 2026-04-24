@@ -106,7 +106,7 @@ def get_link_prediction_args(is_evaluation: bool = False):
     parser.add_argument(
         "--position_feat_dim",
         type=int,
-        default=378,
+        default=172,
         help="dimension of the position embedding",
     )
     parser.add_argument(
@@ -507,7 +507,7 @@ def get_node_classification_args():
     parser.add_argument(
         "--position_feat_dim",
         type=int,
-        default=378,
+        default=172,
         help="dimension of the position embedding",
     )
     parser.add_argument("--patch_size", type=int, default=1, help="patch size")

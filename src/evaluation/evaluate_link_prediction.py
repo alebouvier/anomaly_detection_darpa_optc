@@ -8,6 +8,7 @@ import json
 import torch.nn as nn
 
 from models.TGAT import TGAT
+from models.MemoryModel import MemoryModel, compute_src_dst_node_time_shifts
 from models.GraphMixer import GraphMixer
 from models.DyGFormer import DyGFormer
 from models.modules import MergeLayer
@@ -191,6 +192,33 @@ def main(args):
                     max_input_sequence_length=args.max_input_sequence_length,
                     device=args.device,
                 )
+            elif args.model_name in ["JODIE", "DyRep", "TGN"]:
+                # four floats that represent the mean and standard deviation of source and destination node time shifts in the training data, which is used for JODIE
+                (
+                    src_node_mean_time_shift,
+                    src_node_std_time_shift,
+                    dst_node_mean_time_shift_dst,
+                    dst_node_std_time_shift,
+                ) = compute_src_dst_node_time_shifts(
+                    train_data.src_node_ids,
+                    train_data.dst_node_ids,
+                    train_data.node_interact_times,
+                )
+                dynamic_backbone = MemoryModel(
+                    node_raw_features=node_raw_features,
+                    edge_raw_features=edge_raw_features,
+                    neighbor_sampler=full_neighbor_sampler,
+                    time_feat_dim=args.time_feat_dim,
+                    model_name=args.model_name,
+                    num_layers=args.num_layers,
+                    num_heads=args.num_heads,
+                    dropout=args.dropout,
+                    src_node_mean_time_shift=src_node_mean_time_shift,
+                    src_node_std_time_shift=src_node_std_time_shift,
+                    dst_node_mean_time_shift_dst=dst_node_mean_time_shift_dst,
+                    dst_node_std_time_shift=dst_node_std_time_shift,
+                    device=args.device,
+                )
             else:
                 raise ValueError(f"Wrong value for model_name {args.model_name}!")
             link_predictor = MergeLayer(
@@ -220,6 +248,19 @@ def main(args):
             early_stopping.load_checkpoint(model, map_location="cpu")
 
             model = convert_to_gpu(model, device=args.device)
+
+            if args.model_name in ["JODIE", "DyRep", "TGN"]:
+                for node_id, node_raw_messages in model[
+                    0
+                ].memory_bank.node_raw_messages.items():
+                    new_node_raw_messages = []
+                    for node_raw_message in node_raw_messages:
+                        new_node_raw_messages.append(
+                            (node_raw_message[0].to(args.device), node_raw_message[1])
+                        )
+                    model[0].memory_bank.node_raw_messages[node_id] = (
+                        new_node_raw_messages
+                    )
 
             loss_func = nn.BCELoss()
 
@@ -264,6 +305,10 @@ def main(args):
                     )
                 )
 
+            if args.model_name in ["JODIE", "DyRep", "TGN"]:
+                # the memory in the best model has seen the validation edges, we need to backup the memory for new testing nodes
+                val_backup_memory_bank = model[0].memory_bank.backup_memory_bank()
+
             (
                 test_losses,
                 test_metrics,
@@ -292,6 +337,10 @@ def main(args):
             )
             save_pkl(test_actual_links, f"{test_score_folder}/test_actual_links.pkl")
             save_pkl(non_exist_links, f"{test_score_folder}/non_exist_links.pkl")
+
+            if args.model_name in ["JODIE", "DyRep", "TGN"]:
+                # reload validation memory bank for new testing nodes
+                model[0].memory_bank.reload_memory_bank(val_backup_memory_bank)
 
             new_node_test_losses, new_node_test_metrics = (
                 evaluate_model_link_prediction(

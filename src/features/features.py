@@ -5,7 +5,9 @@ import networkx as nx
 import numpy as np
 from tqdm import tqdm
 
-from features.w2v import eval_for_encoding
+from features.bert import eval_for_encoding
+
+from transformers import BertTokenizerFast, BertModel
 
 from utils.utils import (
     encoding_parent_son,
@@ -25,8 +27,9 @@ class Encoding_builder:
         self.metadata = metadata
         self.cfg = cfg
         if metadata:
-            self.model_path = load_word2vec_model(model)
-            self.model_cmd_line = load_word2vec_model(model.replace("path", "cmd"))
+            self.tokenizer = BertTokenizerFast.from_pretrained('bert-base-uncased')
+            self.model = BertModel.from_pretrained('bert-base-uncased')
+            self.model.eval()
 
     def build_encoding(self):
 
@@ -58,11 +61,11 @@ class Encoding_builder:
             if self.metadata:
                 enc_process_g, enc_process_e = self.encoding_process(self.g, nodes)
 
-                features_g = np.array(enc_struc_g + enc_process_g).astype(np.float32)
+                features_g = np.array(enc_struc_g).astype(np.float32)
                 features_e = {}
                 for k in set(enc_struc_e):
                     features_e[k] = [
-                        np.array(enc_struc_e.get(k, []) + enc_process_e.get(k, [])).astype(np.float32),
+                        np.array(enc_process_e.get(k, [])).astype(np.float32),
                         fe_b[k][0],
                     ]
             else:
@@ -100,13 +103,13 @@ class Encoding_builder:
 
         for node in nodes:  # for each process
             image_path = eval_for_encoding(
-                self.model_path, node.image_path, False, cfg=self.cfg
+                self.tokenizer, self.model, node.image_path, False, cfg=self.cfg
             )
             pp_path = eval_for_encoding(
-                self.model_path, node.parent_image_path, False, cfg=self.cfg
+                self.tokenizer, self.model, node.parent_image_path, False, cfg=self.cfg
             )
             cmd_path = eval_for_encoding(
-                self.model_cmd_line, node.command_line, True, cfg=self.cfg
+                self.tokenizer, self.model, node.command_line, True, cfg=self.cfg
             )
             sid = encoding_sid([node.sid])
             p_and_son_ = encoding_parent_son(

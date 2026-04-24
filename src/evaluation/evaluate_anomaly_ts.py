@@ -47,10 +47,10 @@ def calculate_timestamp_score(links, method="min"):
     scores = [score for _, _, score in links]
 
     if method == "min":
-        return 1 - min(scores)
+        return  min(scores)
     elif method == "bottom_1_percent":
         num_bottom = max(1, int(len(scores) * 0.01))
-        return 1 - np.mean(sorted(scores)[:num_bottom])
+        return  np.mean(sorted(scores)[:num_bottom])
     else:
         raise ValueError(f"Unknown method: {method}")
 

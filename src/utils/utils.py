@@ -23,8 +23,8 @@ import random
 
 from utils.DataLoader import Data
 
-BASE = "data/"
 
+BASE = os.getenv("DATA_BASE", "./data")
 
 # FILES and FOLDER ----------------------------------------
 def open_config(dataset):

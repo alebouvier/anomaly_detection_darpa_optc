@@ -33,7 +33,7 @@ class GraphProcessor:
 
         # Fixed parameters
         self.time_interval = 15  # minutes
-        self.num_features = 189
+        self.num_features = 86
         self.min_events_threshold = 2000  # Minimum events per timestamp
 
         # Load anomaly IDs
@@ -188,7 +188,6 @@ class GraphProcessor:
     def _add_features_columns(self, df):
         base = "data/"
 
-
         file_dict_path = base + "feature_data/features_e.pkl"
         file_dict = load_pickle_file(file_dict_path)
 
@@ -228,10 +227,12 @@ class GraphProcessor:
             dest_features_list.append(dest_features)
 
         src_features_df = pd.DataFrame(
-            src_features_list, columns=[f"src_emb_{i}" for i in range(self.num_features)]
+            src_features_list,
+            columns=[f"src_emb_{i}" for i in range(self.num_features)],
         )
         dest_features_df = pd.DataFrame(
-            dest_features_list, columns=[f"dest_emb_{i}" for i in range(self.num_features)]
+            dest_features_list,
+            columns=[f"dest_emb_{i}" for i in range(self.num_features)],
         )
 
         print(

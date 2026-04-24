@@ -14,6 +14,7 @@ import pandas as pd
 from scipy.ndimage import median_filter
 
 from models.TGAT import TGAT
+from models.MemoryModel import MemoryModel, compute_src_dst_node_time_shifts
 from models.GraphMixer import GraphMixer
 from models.DyGFormer import DyGFormer
 from models.modules import MergeLayer
@@ -188,6 +189,33 @@ def main(args):
                 max_input_sequence_length=args.max_input_sequence_length,
                 device=args.device,
             )
+        elif args.model_name in ["JODIE", "DyRep", "TGN"]:
+            # four floats that represent the mean and standard deviation of source and destination node time shifts in the training data, which is used for JODIE
+            (
+                src_node_mean_time_shift,
+                src_node_std_time_shift,
+                dst_node_mean_time_shift_dst,
+                dst_node_std_time_shift,
+            ) = compute_src_dst_node_time_shifts(
+                train_data.src_node_ids,
+                train_data.dst_node_ids,
+                train_data.node_interact_times,
+            )
+            dynamic_backbone = MemoryModel(
+                node_raw_features=node_raw_features,
+                edge_raw_features=edge_raw_features,
+                neighbor_sampler=train_neighbor_sampler,
+                time_feat_dim=args.time_feat_dim,
+                model_name=args.model_name,
+                num_layers=args.num_layers,
+                num_heads=args.num_heads,
+                dropout=args.dropout,
+                src_node_mean_time_shift=src_node_mean_time_shift,
+                src_node_std_time_shift=src_node_std_time_shift,
+                dst_node_mean_time_shift_dst=dst_node_mean_time_shift_dst,
+                dst_node_std_time_shift=dst_node_std_time_shift,
+                device=args.device,
+            )
         else:
             raise ValueError(f"Wrong value for model_name {args.model_name}!")
         link_predictor = MergeLayer(
@@ -247,7 +275,12 @@ def main(args):
             )
             for batch_idx, train_data_indices in enumerate(train_idx_data_loader_tqdm):
                 train_data_indices = train_data_indices.numpy()
-                batch_src_node_ids, batch_dst_node_ids, batch_node_interact_times, _ = (
+                (
+                    batch_src_node_ids,
+                    batch_dst_node_ids,
+                    batch_node_interact_times,
+                    batch_edge_ids,
+                ) = (
                     train_data.src_node_ids[train_data_indices],
                     train_data.dst_node_ids[train_data_indices],
                     train_data.node_interact_times[train_data_indices],
@@ -327,6 +360,34 @@ def main(args):
                             node_interact_times=batch_node_interact_times,
                         )
                     )
+                elif args.model_name in ["JODIE", "DyRep", "TGN"]:
+                    # note that negative nodes do not change the memories while the positive nodes change the memories,
+                    # we need to first compute the embeddings of negative nodes for memory-based models
+                    # get temporal embedding of negative source and negative destination nodes
+                    # two Tensors, with shape (batch_size, node_feat_dim)
+                    batch_neg_src_node_embeddings, batch_neg_dst_node_embeddings = (
+                        model[0].compute_src_dst_node_temporal_embeddings(
+                            src_node_ids=batch_neg_src_node_ids,
+                            dst_node_ids=batch_neg_dst_node_ids,
+                            node_interact_times=batch_node_interact_times,
+                            edge_ids=None,
+                            edges_are_positive=False,
+                            num_neighbors=args.num_neighbors,
+                        )
+                    )
+
+                    # get temporal embedding of source and destination nodes
+                    # two Tensors, with shape (batch_size, node_feat_dim)
+                    batch_src_node_embeddings, batch_dst_node_embeddings = model[
+                        0
+                    ].compute_src_dst_node_temporal_embeddings(
+                        src_node_ids=batch_src_node_ids,
+                        dst_node_ids=batch_dst_node_ids,
+                        node_interact_times=batch_node_interact_times,
+                        edge_ids=batch_edge_ids,
+                        edges_are_positive=True,
+                        num_neighbors=args.num_neighbors,
+                    )
                 else:
                     raise ValueError(f"Wrong value for model_name {args.model_name}!")
                 # get positive and negative probabilities, shape (batch_size, )
@@ -378,6 +439,14 @@ def main(args):
                     )
                 train_loss_per_batch.append(loss.item())
 
+                if args.model_name in ["JODIE", "DyRep", "TGN"]:
+                    # detach the memories and raw messages of nodes in the memory bank after each batch, so we don't back propagate to the start of time
+                    model[0].memory_bank.detach_memory_bank()
+
+            if args.model_name in ["JODIE", "DyRep", "TGN"]:
+                # backup memory bank after training so it can be used for new validation nodes
+                train_backup_memory_bank = model[0].memory_bank.backup_memory_bank()
+
             epoch_train_loss = np.mean(train_losses)
             train_loss_history.append(epoch_train_loss)
 
@@ -399,6 +468,13 @@ def main(args):
             epoch_val_loss = np.mean(val_losses)
             val_loss_history.append(epoch_val_loss)
 
+            if args.model_name in ["JODIE", "DyRep", "TGN"]:
+                # backup memory bank after validating so it can be used for testing nodes (since test edges are strictly later in time than validation edges)
+                val_backup_memory_bank = model[0].memory_bank.backup_memory_bank()
+
+                # reload training memory bank for new validation nodes
+                model[0].memory_bank.reload_memory_bank(train_backup_memory_bank)
+
             new_node_val_losses, new_node_val_metrics = evaluate_model_link_prediction(
                 model_name=args.model_name,
                 model=model,
@@ -411,6 +487,11 @@ def main(args):
                 time_gap=args.time_gap,
                 temp=args.temperature,
             )
+
+            if args.model_name in ["JODIE", "DyRep", "TGN"]:
+                # reload validation memory bank for testing nodes or saving models
+                # note that since model treats memory as parameters, we need to reload the memory to val_backup_memory_bank for saving models
+                model[0].memory_bank.reload_memory_bank(val_backup_memory_bank)
 
             logger.info(
                 f"Epoch: {epoch + 1}, learning rate: {optimizer.param_groups[0]['lr']}, train loss: {np.mean(train_losses):.4f}"
