@@ -28,8 +28,8 @@ class Encoding_builder:
         self.metadata = metadata
         self.cfg = cfg
         if metadata:
-            self.tokenizer = BertTokenizerFast.from_pretrained('bert-base-uncased')
-            self.model = BertModel.from_pretrained('bert-base-uncased')
+            self.tokenizer = BertTokenizerFast.from_pretrained('google/bert_uncased_L-2_H-128_A-2')
+            self.model = BertModel.from_pretrained('google/bert_uncased_L-2_H-128_A-2')
             self.model.eval()
 
     def build_encoding(self):
@@ -106,20 +106,20 @@ class Encoding_builder:
             image_path = eval_for_encoding(
                 self.tokenizer, self.model, node.image_path, False, cfg=self.cfg
             )
-            pp_path = eval_for_encoding(
-                self.tokenizer, self.model, node.parent_image_path, False, cfg=self.cfg
-            )
-            cmd_path = eval_for_encoding(
-                self.tokenizer, self.model, node.command_line, True, cfg=self.cfg
-            )
+            # pp_path = eval_for_encoding(
+            #     self.tokenizer, self.model, node.parent_image_path, False, cfg=self.cfg
+            # )
+            # cmd_path = eval_for_encoding(
+            #     self.tokenizer, self.model, node.command_line, True, cfg=self.cfg
+            # )
             sid = encoding_sid([node.sid])
             p_and_son_ = encoding_parent_son(
                 copy.deepcopy(p_and_son), node.parent_image_path, node.image_path
             )
             features_e_g[node.id] = (  # Encoding of a process
                 image_path.tolist()
-                + pp_path.tolist()
-                + cmd_path.tolist()
+                # + pp_path.tolist()
+                # + cmd_path.tolist()
                 + sid
                 + p_and_son_
             )
@@ -127,20 +127,20 @@ class Encoding_builder:
 
             sids.append(node.sid)
             image_paths.append(image_path)
-            parent_image_paths.append(pp_path)
-            command_line_paths.append(cmd_path)
+            # parent_image_paths.append(pp_path)
+            # command_line_paths.append(cmd_path)
             parent_and_son = encoding_parent_son(
                 parent_and_son, node.parent_image_path, node.image_path
             )
 
         image_path = self.mean_path(image_paths)
-        parent_image_path = self.mean_path(parent_image_paths)
-        command_line_path = self.mean_path(command_line_paths)
+        # parent_image_path = self.mean_path(parent_image_paths)
+        # command_line_path = self.mean_path(command_line_paths)
         sid_enc = encoding_sid(sids)
         features_g = (
             image_path.tolist()
-            + parent_image_path.tolist()
-            + command_line_path.tolist()
+            # + parent_image_path.tolist()
+            # + command_line_path.tolist()
             + sid_enc
             + parent_and_son
         )
