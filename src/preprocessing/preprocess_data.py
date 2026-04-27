@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from pandas.testing import assert_frame_equal
-from utils.utils import create_folder, BASE
+from utils.utils import create_folder, BASE, open_config
 
 
 def preprocess(dataset_name: str):
@@ -78,7 +78,7 @@ def reindex(df: pd.DataFrame, bipartite: bool = True):
 
 
 def preprocess_data(
-    dataset_name: str, bipartite: bool = True, node_feat_dim: int = 172
+    dataset_name: str, bipartite: bool = True, node_feat_dim: int = 278
 ):
     """
     preprocess the data
@@ -186,4 +186,5 @@ def check_data(dataset_name: str):
 
 
 def main(dataset_name, bipartite, node_feat_dim):
-    preprocess_data(dataset_name, bipartite, node_feat_dim)
+
+    preprocess_data(dataset_name, bipartite, node_feat_dim=node_feat_dim)

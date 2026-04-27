@@ -13,10 +13,22 @@ log "Start Job"
 cd ~/optc_ad_project
 
 log "Activation environement"
-source .venv/bin/activate
+source ~/miniconda3/etc/profile.d/conda.sh
+
+conda activate optc-gpu
+
+
+echo "Conda:"
+which conda
+
+echo "Python:"
+which python
+python --version
+
+export DATA_BASE="./data"
 
 
 log "Start test anomaly detection"
-~/.pyenv/versions/3.11.15/bin/python src/optc_ad.py -t test_anomaly_detection --model_name TGAT
+python src/optc_ad.py -t test_anomaly_detection --model_name TGAT
 
 log "End Job"

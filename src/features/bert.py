@@ -82,6 +82,7 @@ def eval_for_encoding(tokenizer, model, data, is_command, cfg):
         tokenizer, model, sentences_emb, _, _, _, _ = eval(
             tokenizer, model, [data_lst, ext, data, None, None], is_command, cfg
         )
+
         return sentences_emb
 
 
@@ -162,9 +163,9 @@ def get_word_embedding(word: str, tokenizer, model) -> torch.Tensor:
     with torch.no_grad():
         outputs = model(**inputs)
 
-    # outputs.last_hidden_state shape: [batch, tokens, 768]
+    # outputs.last_hidden_state shape: [batch, tokens, 128]
     # Token 0 = [CLS], 1 = word, 2 = [SEP]
-    word_embedding = outputs.last_hidden_state[0, 1, :]  # shape: [768]
+    word_embedding = outputs.last_hidden_state[0, 1, :]  # shape: [128]
     return word_embedding
 
 def eval(tokenizer, model, data, is_command, cfg, f="const", q=0.1):
@@ -193,6 +194,7 @@ def eval(tokenizer, model, data, is_command, cfg, f="const", q=0.1):
             lst.append(get_word_embedding(j, tokenizer, model))
 
     mean_emb = np.mean(np.array(lst), axis=0)
+
 
     return tokenizer, model, mean_emb, data[2], data[3], data[4], h
 

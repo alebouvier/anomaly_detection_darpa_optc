@@ -72,14 +72,15 @@ def main(args):
     # in the inductive setting, negatives are sampled only amongst other new nodes
     # train negative edge sampler does not need to specify the seed, but evaluation samplers need to do so
     train_neg_edge_sampler = NegativeEdgeSampler(
-        src_node_ids=train_data.src_node_ids, dst_node_ids=train_data.dst_node_ids
+        src_node_ids=train_data.src_node_ids, dst_node_ids=train_data.dst_node_ids, negative_sample_strategy=args.negative_sample_strategy
     )
     val_neg_edge_sampler = NegativeEdgeSampler(
-        src_node_ids=full_data.src_node_ids, dst_node_ids=full_data.dst_node_ids, seed=0
+        src_node_ids=full_data.src_node_ids, dst_node_ids=full_data.dst_node_ids, negative_sample_strategy=args.negative_sample_strategy, seed=1
     )
     new_node_val_neg_edge_sampler = NegativeEdgeSampler(
         src_node_ids=new_node_val_data.src_node_ids,
         dst_node_ids=new_node_val_data.dst_node_ids,
+        negative_sample_strategy=args.negative_sample_strategy,
         seed=1,
     )
     # test_neg_edge_sampler = NegativeEdgeSampler(src_node_ids=full_data.src_node_ids, dst_node_ids=full_data.dst_node_ids, seed=2)

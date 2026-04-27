@@ -107,63 +107,6 @@ def extract_labels(clients, duration):
     return labels_processes, labels_graphs
 
 
-BASE = "/srv/storage/pirat@storage3.rennes.grid5000.fr/fdijoud/"
-DURATION_EVENT = 15
-LEN_ENCODE_PATH = 25
-WINDOW = 5
-
-SPLIT_PATH = r"://|:/|//|/"
-SPLIT_EXTENSION = re.compile(r"^(.*)\.(.*?)$")
-HARD_DEVICE = r"""([/]+Device[/]+HarddiskVolume1)"""
-SIMPLE_HARD_DEVICE = "C:"
-SPLIT_PATH_COMMAND_LINE = r'"[^"]*"|\S+'
-
-NODES_TYPES = ["Process"]
-
-NODES_TYPES_ALL = [
-    "Node",
-    "Process",
-    "File",
-    "Flow",
-    "Module",
-    "Thread",
-    "Registry",
-    "Task",
-    "Shell",
-    "Host",
-    "Service",
-    "User_session",
-]
-
-LST_ACTION = [
-    "CREATE",
-    "DELETE",
-    "MODIFY",
-    "READ",
-    "RENAME",
-    "WRITE",
-    "MESSAGE",
-    "OPEN",
-    "START",
-    "LOAD",
-    "TERMINATE",
-    "ADD",
-    "EDIT",
-    "REMOVE",
-    "COMMAND",
-    "REMOTE_CREATE",
-    "GRANT",
-    "INTERACTIVE",
-    "LOGIN",
-    "LOGOUT",
-    "RDP",
-    "REMOTE",
-    "UNLOCK",
-]
-
-
-LST_ACTION_END = ["DELETE", "TERMINATE", "REMOVE", "LOGOUT"]
-LST_ACTION_START = ["CREATE", "START", "LOAD", "ADD", "COMMAND", "LOGIN"]
 
 
 def create_folder(folder):

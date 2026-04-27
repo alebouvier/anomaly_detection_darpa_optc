@@ -3,7 +3,9 @@ import numpy as np
 import random
 import pandas as pd
 import datetime as dt
+import os
 
+BASE = os.getenv("DATA_BASE", "./data")
 
 class CustomizedDataset(Dataset):
     def __init__(self, indices_list: list):
@@ -70,6 +72,12 @@ class Data:
         self.num_unique_nodes = len(self.unique_node_ids)
 
 
+def get_calibration_data(train_Data):
+    # retrieve 10% of train Data randomly
+    calibration
+
+
+
 def get_link_prediction_data(dataset_name: str, val_start: float, test_start: float):
     """
     generate data for link prediction task (inductive & transductive settings)
@@ -81,23 +89,23 @@ def get_link_prediction_data(dataset_name: str, val_start: float, test_start: fl
     """
     # Load data and train val test split
     graph_df = pd.read_csv(
-        "data/processed_data/{}/ml_{}.csv".format(dataset_name, dataset_name)
+        f"{BASE}/processed_data/{dataset_name}/ml_{dataset_name}.csv"
     )
     edge_raw_features = np.load(
-        "data/processed_data/{}/ml_{}.npy".format(dataset_name, dataset_name)
+        f"{BASE}/processed_data/{dataset_name}/ml_{dataset_name}.npy"
     )
     node_raw_features = np.load(
-        "data/processed_data/{}/ml_{}_node.npy".format(dataset_name, dataset_name)
+        f"{BASE}/processed_data/{dataset_name}/ml_{dataset_name}_node.npy"
     )
 
-    NODE_FEAT_DIM = EDGE_FEAT_DIM = 172
+    NODE_FEAT_DIM = EDGE_FEAT_DIM = 278
     assert NODE_FEAT_DIM >= node_raw_features.shape[1], (
         f"Node feature dimension in dataset {dataset_name} is bigger than {NODE_FEAT_DIM}!"
     )
     assert EDGE_FEAT_DIM >= edge_raw_features.shape[1], (
         f"Edge feature dimension in dataset {dataset_name} is bigger than {EDGE_FEAT_DIM}!"
     )
-    # padding the features of edges and nodes to the same dimension (172 for all the datasets)
+    # padding the features of edges and nodes to the same dimension (278 for all the datasets)
     if node_raw_features.shape[1] < NODE_FEAT_DIM:
         node_zero_padding = np.zeros(
             (node_raw_features.shape[0], NODE_FEAT_DIM - node_raw_features.shape[1])
@@ -161,8 +169,15 @@ def get_link_prediction_data(dataset_name: str, val_start: float, test_start: fl
         ~new_test_source_mask, ~new_test_destination_mask
     )
 
-    # for train data, we keep edges happening before the validation time which do not involve any new node, used for inductiveness
-    train_mask = np.logical_and(node_interact_times <= val_time, observed_edges_mask)
+    # for train  and calibration data, we keep edges happening before the validation time which do not involve any new node, used for inductiveness
+    train_cal_mask = np.logical_and(node_interact_times <= val_time, observed_edges_mask)
+
+    cal_ids = random.sample(range(len(train_cal_mask))[train_cal_mask], int(0.1*np.sum(train_cal_mask)))
+
+    cal_mask = np.zeros(len(train_cal_mask))
+    cal_mask[cal_ids] = 1
+
+    train_mask = np.logical_and(train_cal_mask, np.logical_not(cal_mask))
 
     train_data = Data(
         src_node_ids=src_node_ids[train_mask],
@@ -171,6 +186,16 @@ def get_link_prediction_data(dataset_name: str, val_start: float, test_start: fl
         edge_ids=edge_ids[train_mask],
         labels=labels[train_mask],
     )
+
+    cal_data = Data(
+        src_node_ids=src_node_ids[cal_mask],
+        dst_node_ids=dst_node_ids[cal_mask],
+        node_interact_times=node_interact_times[cal_mask],
+        edge_ids=edge_ids[cal_mask],
+        labels=labels[cal_mask],
+    )
+
+    
 
     # define the new nodes sets for testing inductiveness of the model
     train_node_set = set(train_data.src_node_ids).union(train_data.dst_node_ids)
@@ -297,14 +322,14 @@ def get_node_classification_data(
         "data/processed_data/{}/ml_{}_node.npy".format(dataset_name, dataset_name)
     )
 
-    NODE_FEAT_DIM = EDGE_FEAT_DIM = 172
+    NODE_FEAT_DIM = EDGE_FEAT_DIM = 278
     assert NODE_FEAT_DIM >= node_raw_features.shape[1], (
         f"Node feature dimension in dataset {dataset_name} is bigger than {NODE_FEAT_DIM}!"
     )
     assert EDGE_FEAT_DIM >= edge_raw_features.shape[1], (
         f"Edge feature dimension in dataset {dataset_name} is bigger than {EDGE_FEAT_DIM}!"
     )
-    # padding the features of edges and nodes to the same dimension (172 for all the datasets)
+    # padding the features of edges and nodes to the same dimension (278 for all the datasets)
     if node_raw_features.shape[1] < NODE_FEAT_DIM:
         node_zero_padding = np.zeros(
             (node_raw_features.shape[0], NODE_FEAT_DIM - node_raw_features.shape[1])

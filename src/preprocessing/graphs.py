@@ -787,9 +787,9 @@ def main( clients, duration, logs, dataset):
                 cmds[c].update(cmds_)
                 paths[c].update(paths_)
 
-    save_pkl(graphs, BASE + "graph_data/graphs.pkl")
+    save_pkl(graphs, f"{BASE}/graph_data/graphs.pkl")
     if metadata:
-        save_pkl(cmds, BASE + "feature_data/cmds.pkl")
-        save_pkl(paths, BASE + "feature_data/paths.pkl")
+        save_pkl(cmds, f"{BASE}/feature_data/cmds.pkl")
+        save_pkl(paths, f"{BASE}/feature_data/paths.pkl")
     print("End task graph")
     return

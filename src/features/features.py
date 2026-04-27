@@ -1,11 +1,12 @@
 import copy
 import gc
 import importlib
+from xml.parsers.expat import model
 import networkx as nx
 import numpy as np
 from tqdm import tqdm
 
-from features.w2v import eval_for_encoding
+from features.bert import eval_for_encoding
 
 from transformers import BertTokenizerFast, BertModel
 
@@ -21,16 +22,15 @@ from utils.utils import (
 
 
 class Encoding_builder:
-    def __init__(self, file, model, metadata, selected_nodes, cfg):
+    def __init__(self, file, tokenizer, model, metadata, selected_nodes, cfg):
         self.g = file
         self.encoding_size = 0
         self.selected_nodes = selected_nodes
         self.metadata = metadata
         self.cfg = cfg
         if metadata:
-            self.tokenizer = BertTokenizerFast.from_pretrained('google/bert_uncased_L-2_H-128_A-2')
-            self.model = BertModel.from_pretrained('google/bert_uncased_L-2_H-128_A-2')
-            self.model.eval()
+            self.tokenizer = tokenizer
+            self.model = model
 
     def build_encoding(self):
 
@@ -123,6 +123,10 @@ class Encoding_builder:
                 + sid
                 + p_and_son_
             )
+
+            
+        
+                
             # print(len(features_e_g[node.id]))
 
             sids.append(node.sid)
@@ -133,17 +137,18 @@ class Encoding_builder:
                 parent_and_son, node.parent_image_path, node.image_path
             )
 
-        image_path = self.mean_path(image_paths)
-        # parent_image_path = self.mean_path(parent_image_paths)
-        # command_line_path = self.mean_path(command_line_paths)
-        sid_enc = encoding_sid(sids)
-        features_g = (
-            image_path.tolist()
-            # + parent_image_path.tolist()
-            # + command_line_path.tolist()
-            + sid_enc
-            + parent_and_son
-        )
+        # image_path = self.mean_path(image_paths)
+        # # parent_image_path = self.mean_path(parent_image_paths)
+        # # command_line_path = self.mean_path(command_line_paths)
+        # sid_enc = encoding_sid(sids)
+        # features_g = (
+        #     image_path.tolist()
+        #     # + parent_image_path.tolist()
+        #     # + command_line_path.tolist()
+        #     + sid_enc
+        #     + parent_and_son
+        # )
+        features_g = None
         return features_g, features_e_g
 
     def degree(self, degrees):
@@ -372,28 +377,32 @@ def main( clients, graphs, model_w2v_path, dataset, g=False, e=False):
 
     data = load_pickle_file(graphs)
 
+    tokenizer = BertTokenizerFast.from_pretrained('google/bert_uncased_L-2_H-128_A-2')
+    model = BertModel.from_pretrained('google/bert_uncased_L-2_H-128_A-2')
+    model.eval()
+
     for c in clients:
         for d, g in tqdm(data[c].items()):
             G = load_pickle_file(g)
             e = Encoding_builder(
-                G, model_w2v_path, metadata, utils_dataset, cfg_dataset
+                G, tokenizer, model, metadata, utils_dataset, cfg_dataset
             )
             e_g, e_e = e.build_encoding()
 
             save_pkl(
                 {d: e_g},
-                BASE + f"feature_data/optc_{c}/features/{c}_{d}_g.pkl",
+                f"{BASE}/feature_data/optc_{c}/features/{c}_{d}_g.pkl",
             )
             save_pkl(
                 {d: e_e},
-                BASE + f"feature_data/optc_{c}/features/{c}_{d}_e.pkl",
+                f"{BASE}/feature_data/optc_{c}/features/{c}_{d}_e.pkl",
             )
             features_g[c][d] = f"feature_data/optc_{c}/features/{c}_{d}_g.pkl"
             features_e[c][d] = f"feature_data/optc_{c}/features/{c}_{d}_e.pkl"
             del G, e, e_g, e_e
             gc.collect()
 
-    save_pkl(features_g, BASE + "/feature_data/features_g.pkl")
-    save_pkl(features_e, BASE + "/feature_data/features_e.pkl")
+    save_pkl(features_g, f"{BASE}/feature_data/features_g.pkl")
+    save_pkl(features_e, f"{BASE}/feature_data/features_e.pkl")
 
     return

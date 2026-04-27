@@ -13,16 +13,28 @@ log "Start Job"
 cd ~/optc_ad_project
 
 log "Activation environement"
-source .venv/bin/activate
+source ~/miniconda3/etc/profile.d/conda.sh
+
+conda activate optc-gpu
+
+
+echo "Conda:"
+which conda
+
+echo "Python:"
+which python
+python --version
+
+export DATA_BASE="./data"
 
 log "Start preprocessing log data to graph"
-~/.pyenv/versions/3.11.15/bin/python src/optc_ad.py --clients 201 -t graph 
+python src/optc_ad.py --clients 201 -t graph 
 
 log "Start training model word2vec"
-~/.pyenv/versions/3.11.15/bin/python src/optc_ad.py --clients 201 -t w2v 
+python src/optc_ad.py --clients 201 -t w2v 
 
 log "Start extracting features"
-~/.pyenv/versions/3.11.15/bin/python src/optc_ad.py --clients 201 -t feature 
+python src/optc_ad.py --clients 201 -t feature 
 
 log "Start preprocessing graph to csv"
-~/.pyenv/versions/3.11.15/bin/python src/optc_ad.py --clients 201 -t preprocessing 
+python src/optc_ad.py --clients 201 -t preprocessing 

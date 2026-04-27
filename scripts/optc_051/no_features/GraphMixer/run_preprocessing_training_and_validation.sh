@@ -13,17 +13,29 @@ log "Start Job"
 cd ~/optc_ad_project
 
 log "Activation environement"
-source .venv/bin/activate
+source ~/miniconda3/etc/profile.d/conda.sh
+
+conda activate optc-gpu
+
+
+echo "Conda:"
+which conda
+
+echo "Python:"
+which python
+python --version
+
+export DATA_BASE="./data"
 
 
 log "Start preprocessing graph to csv"
-~/.pyenv/versions/3.11.15/bin/python src/optc_ad.py -t preprocessing
+python src/optc_ad.py -t preprocessing
 
 
 log "Start training link prediction"
-~/.pyenv/versions/3.11.15/bin/python src/optc_ad.py -t train_link_prediction
+python src/optc_ad.py -t train_link_prediction
 
 log "Start validation link prediction"
-~/.pyenv/versions/3.11.15/bin/python src/optc_ad.py -t validate_link_prediction
+python src/optc_ad.py -t validate_link_prediction
 
 log "End Job"

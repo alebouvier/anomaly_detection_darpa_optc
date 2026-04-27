@@ -2,13 +2,13 @@ from pathlib import Path
 import pandas as pd
 from datetime import datetime
 import datetime as dt
-from data.optc_utils import load_pickle_file
+
 import data.optc_graph_classes as graph_classes
 import json
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import argparse
-from utils.utils import create_folder, BASE
+from utils.utils import load_pickle_file, create_folder, BASE
 
 
 class GraphProcessor:
@@ -23,6 +23,7 @@ class GraphProcessor:
         start_val,
         start_test,
         with_features,
+        len_encode_path,
     ):
         self.host = host
         self.folder_path = Path(input_path)
@@ -30,10 +31,10 @@ class GraphProcessor:
         self.label_path = label_path
         self.files = list(self.folder_path.glob("*.pkl"))
         self.with_features = with_features
-
+        
         # Fixed parameters
         self.time_interval = 15  # minutes
-        self.num_features = 86
+        self.num_features = len_encode_path + 11
         self.min_events_threshold = 2000  # Minimum events per timestamp
 
         # Load anomaly IDs
@@ -186,9 +187,9 @@ class GraphProcessor:
         return df_filtered
 
     def _add_features_columns(self, df):
-        base = BASE
 
-        file_dict_path = base + "feature_data/features_e.pkl"
+
+        file_dict_path = f"{BASE}/feature_data/features_e.pkl"
         file_dict = load_pickle_file(file_dict_path)
 
         features_cache = {}
@@ -205,20 +206,32 @@ class GraphProcessor:
             timestamp = row.timestamp_formatted
 
             if timestamp not in features_cache:
-                features_file_path = base + file_dict[self.host][timestamp]
+                features_file_path = f"{BASE}/{file_dict[self.host][timestamp]}"
                 features_cache[timestamp] = load_pickle_file(features_file_path)
             features_dict = features_cache[timestamp][timestamp]
 
             # source node
             if src_name in features_dict:
-                src_features = features_dict[src_name][0]
+                if features_dict[src_name][0].shape[0] != self.num_features:
+                    print(
+                        f"Warning: feature dimension mismatch for {src_name} at {timestamp}. Expected {self.num_features}, got {features_dict[src_name][0].shape[0]}"
+                    )
+                    src_features = zero_features
+                else:   
+                    src_features = features_dict[src_name][0]
             else:
                 src_features = zero_features
                 nb_not_found += 1
 
             # destination node
             if dest_name in features_dict:
-                dest_features = features_dict[dest_name][0]
+                if features_dict[dest_name][0].shape[0] != self.num_features:
+                    print(
+                        f"Warning: feature dimension mismatch for {dest_name} at {timestamp}. Expected {self.num_features}, got {features_dict[dest_name][0].shape[0]}"
+                    )
+                    dest_features = zero_features
+                else:
+                    dest_features = features_dict[dest_name][0]
             else:
                 dest_features = zero_features
                 nb_not_found += 1
@@ -594,11 +607,11 @@ def validate_paths(args):
 
 
 def main(
-    host, input_path, output_path, label_path, start_val, start_test, with_features
+    host, input_path, output_path, label_path, start_val, start_test, with_features, len_encode_path
 ):
 
     # Process the dataset
     processor = GraphProcessor(
-        host, input_path, output_path, label_path, start_val, start_test, with_features
+        host, input_path, output_path, label_path, start_val, start_test, with_features, len_encode_path
     )
     processor.process()

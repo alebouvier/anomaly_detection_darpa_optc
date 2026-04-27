@@ -59,19 +59,21 @@ def main(args):
     # initialize negative samplers, set seeds for validation and testing so negatives are the same across different runs
     # in the inductive setting, negatives are sampled only amongst other new nodes
     val_neg_edge_sampler = NegativeEdgeSampler(
-        src_node_ids=full_data.src_node_ids, dst_node_ids=full_data.dst_node_ids, seed=0
+        src_node_ids=full_data.src_node_ids, dst_node_ids=full_data.dst_node_ids, negative_sample_strategy=args.negative_sample_strategy, seed=0
     )
     new_node_val_neg_edge_sampler = NegativeEdgeSampler(
         src_node_ids=new_node_val_data.src_node_ids,
         dst_node_ids=new_node_val_data.dst_node_ids,
+        negative_sample_strategy=args.negative_sample_strategy,
         seed=1,
     )
     test_neg_edge_sampler = NegativeEdgeSampler(
-        src_node_ids=full_data.src_node_ids, dst_node_ids=full_data.dst_node_ids, seed=2
+        src_node_ids=full_data.src_node_ids, dst_node_ids=full_data.dst_node_ids, negative_sample_strategy=args.negative_sample_strategy, seed=2
     )
     new_node_test_neg_edge_sampler = NegativeEdgeSampler(
         src_node_ids=new_node_test_data.src_node_ids,
         dst_node_ids=new_node_test_data.dst_node_ids,
+        negative_sample_strategy=args.negative_sample_strategy,
         seed=3,
     )
 

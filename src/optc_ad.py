@@ -1,6 +1,6 @@
 import argparse
 
-from utils.utils import BASE
+from utils.utils import BASE, open_config
 from utils.load_configs import get_link_prediction_args
 
 from preprocessing.graphs import main as building_graphs
@@ -85,6 +85,8 @@ if __name__ == "__main__":
         features_g = f"{BASE}/feature_data/features_g.pkl"
         label_path = f"{BASE}/label_data/malicious.json"
 
+        cfg_dataset = open_config(dataset)
+
         task = args.task
         if task == "graph":  # construction of all graphs
             building_graphs(clients, duration, logs, dataset)
@@ -94,7 +96,7 @@ if __name__ == "__main__":
             training_w2v(clients, paths, data=dataset)
 
         elif task == "feature":  # extraction of features
-            extract_features(BASE, clients, graphs, model_w2v_path, dataset)
+            extract_features(clients, graphs, model_w2v_path, dataset)
 
         elif task == "preprocessing":
             for client in clients:
@@ -109,8 +111,14 @@ if __name__ == "__main__":
                     start_val,
                     start_test,
                     args.with_features,
+                    cfg_dataset["MODEL"]["LEN_ENCODE_PATH"],
                 )
-                ml_data_preprocessor(dataset_name, bipartite=False, node_feat_dim=25)
+                ml_data_preprocessor(dataset_name, bipartite=False, node_feat_dim=cfg_dataset["MODEL"]["LEN_ENCODE_PATH"])
+
+        elif task == "preprocessing_2":
+            for client in clients:
+                dataset_name = f"optc_{client}"
+                ml_data_preprocessor(dataset_name, bipartite=False, node_feat_dim=cfg_dataset["MODEL"]["LEN_ENCODE_PATH"])
 
         elif task == "train_link_prediction":
             train_link_prediction_args = get_link_prediction_args(is_evaluation=False)
@@ -157,8 +165,9 @@ if __name__ == "__main__":
                     start_val,
                     start_test,
                     args.with_features,
+                    cfg_dataset["MODEL"]["LEN_ENCODE_PATH"],
                 )
-                ml_data_preprocessor(dataset_name, bipartite=False, node_feat_dim=25)
+                ml_data_preprocessor(dataset_name, bipartite=False, node_feat_dim=cfg_dataset["MODEL"]["LEN_ENCODE_PATH"])
 
         elif task == "complete":
             building_graphs( clients, duration, logs, dataset)
@@ -178,8 +187,9 @@ if __name__ == "__main__":
                     start_val,
                     start_test,
                     args.with_features,
+                    cfg_dataset["MODEL"]["LEN_ENCODE_PATH"],
                 )
-                ml_data_preprocessor(dataset_name, bipartite=False, node_feat_dim=25)
+                ml_data_preprocessor(dataset_name, bipartite=False, node_feat_dim=cfg_dataset["MODEL"]["LEN_ENCODE_PATH"])
                 ML_args.dataset_name = f"optc_{client}"
                 training_link_prediction(ML_args)
                 validate_link_prediction(ML_args)
