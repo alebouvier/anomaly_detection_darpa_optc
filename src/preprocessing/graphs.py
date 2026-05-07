@@ -661,7 +661,7 @@ class Graph_builder:
         }
 
 
-def extract_data(c, k, file, duration, base, metadata, node_dataset, cfg):
+def extract_data(c, k, file, duration, metadata, node_dataset, cfg):
     print("File: ", file)
     graphs, cmds, paths = {}, {}, {}
     graph = []
@@ -697,29 +697,25 @@ def extract_data(c, k, file, duration, base, metadata, node_dataset, cfg):
                 )  # Create the graph
                 save_pkl(
                     ob_graph.get_g(),
-                    base + f"graph_data/optc_{c}/{c}_{duration}_{k}_{start}.pkl",
+                    f"{BASE}/graph_data/optc_{c}/{c}_{duration}_{k}_{start}.pkl",
                 )
                 if metadata:
                     save_pkl(
                         ob_graph.get_command_lines(),
-                        base
-                        + f"feature_data/optc_{c}/cmds/{c}_{duration}_{k}_{start}.pkl",
+                        f"{BASE}/feature_data/optc_{c}/cmds/{c}_{duration}_{k}_{start}.pkl",
                     )
                     save_pkl(
                         ob_graph.get_path(),
-                        base
-                        + f"feature_data/optc_{c}/paths/{c}_{duration}_{k}_{start}.pkl",
+                        f"{BASE}/feature_data/optc_{c}/paths/{c}_{duration}_{k}_{start}.pkl",
                     )
                     cmds[start] = (
-                        base
-                        + f"feature_data/optc_{c}/cmds/{c}_{duration}_{k}_{start}.pkl"
+                        f"{BASE}/feature_data/optc_{c}/cmds/{c}_{duration}_{k}_{start}.pkl"
                     )
                     paths[start] = (
-                        base
-                        + f"feature_data/optc_{c}/paths/{c}_{duration}_{k}_{start}.pkl"
+                        f"{BASE}/feature_data/optc_{c}/paths/{c}_{duration}_{k}_{start}.pkl"
                     )
                 graphs[start] = (
-                    base + f"graph_data/optc_{c}/{c}_{duration}_{k}_{start}.pkl"
+                    f"{BASE}/graph_data/optc_{c}/{c}_{duration}_{k}_{start}.pkl"
                 )
                 del ob_graph
 
@@ -736,25 +732,24 @@ def extract_data(c, k, file, duration, base, metadata, node_dataset, cfg):
             ob_graph = Graph_builder(graph, duration, metadata, node_dataset, cfg)
             save_pkl(
                 ob_graph.get_g(),
-                base + f"graph_data/optc_{c}/{c}_{duration}_{k}_{start}.pkl",
+                f"{BASE}/graph_data/optc_{c}/{c}_{duration}_{k}_{start}.pkl",
             )
             if metadata:
                 save_pkl(
                     ob_graph.get_command_lines(),
-                    base + f"feature_data/optc_{c}/cmds/{c}_{duration}_{k}_{start}.pkl",
+                    f"{BASE}/feature_data/optc_{c}/cmds/{c}_{duration}_{k}_{start}.pkl",
                 )
                 save_pkl(
                     ob_graph.get_path(),
-                    base
-                    + f"feature_data/optc_{c}/paths/{c}_{duration}_{k}_{start}.pkl",
+                    f"{BASE}/feature_data/optc_{c}/paths/{c}_{duration}_{k}_{start}.pkl",
                 )
                 cmds[start] = (
-                    base + f"feature_data/optc_{c}/cmds/{c}_{duration}_{k}_{start}.pkl"
+                    f"{BASE}/feature_data/optc_{c}/cmds/{c}_{duration}_{k}_{start}.pkl"
                 )
                 paths[start] = (
-                    base + f"feature_data/optc_{c}/paths/{c}_{duration}_{k}_{start}.pkl"
+                    f"{BASE}/feature_data/optc_{c}/paths/{c}_{duration}_{k}_{start}.pkl"
                 )
-            graphs[start] = base + f"graph_data/optc_{c}/{c}_{duration}_{k}_{start}.pkl"
+            graphs[start] = f"{BASE}/graph_data/optc_{c}/{c}_{duration}_{k}_{start}.pkl"
             del ob_graph
         return graphs, cmds, paths
 
@@ -780,7 +775,7 @@ def main( clients, duration, logs, dataset):
         print(data)
         for k, d in enumerate(data):
             graphs_, cmds_, paths_ = extract_data(
-                c, k, d, duration, BASE, metadata, node_dataset, cfg
+                c, k, d, duration, metadata, node_dataset, cfg
             )
             graphs[c].update(graphs_)
             if metadata:

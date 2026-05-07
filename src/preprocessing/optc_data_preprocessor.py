@@ -24,6 +24,7 @@ class GraphProcessor:
         start_test,
         with_features,
         len_encode_path,
+        aggregation
     ):
         self.host = host
         self.folder_path = Path(input_path)
@@ -31,10 +32,11 @@ class GraphProcessor:
         self.label_path = label_path
         self.files = list(self.folder_path.glob("*.pkl"))
         self.with_features = with_features
+        self.aggregation = aggregation
         
         # Fixed parameters
         self.time_interval = 15  # minutes
-        self.num_features = len_encode_path + 11
+        self.num_features = len_encode_path * 3 + 11
         self.min_events_threshold = 2000  # Minimum events per timestamp
 
         # Load anomaly IDs
@@ -205,6 +207,13 @@ class GraphProcessor:
             dest_name = row.destination_name
             timestamp = row.timestamp_formatted
 
+            if not self.aggregation:
+                timestamp = (
+                    pd.to_datetime(timestamp, format="mixed")
+                    .floor("15min")
+                    .isoformat(timespec="milliseconds")
+                )
+
             if timestamp not in features_cache:
                 features_file_path = f"{BASE}/{file_dict[self.host][timestamp]}"
                 features_cache[timestamp] = load_pickle_file(features_file_path)
@@ -274,9 +283,10 @@ class GraphProcessor:
         )
 
         # Process timestamps using vectorized operations
-        df["timestamp"] = pd.to_datetime(df["timestamp"], format="mixed").dt.floor(
-            "15min"
-        )
+        if self.aggregation:
+            df["timestamp"] = pd.to_datetime(df["timestamp"], format="mixed").dt.floor(
+                "15min"
+            )
         df["timestamp_formatted"] = (
             pd.to_datetime(df["timestamp"], format="mixed")
             .dt.strftime("%Y-%m-%dT%H:%M:%S.000%z")
@@ -296,7 +306,10 @@ class GraphProcessor:
             df = df.assign(**feature_cols)
 
         # Apply filtering criteria
-        df_filtered = self._filter_by_timestamp_criteria(df)
+        if self.aggregation:
+            df_filtered = self._filter_by_timestamp_criteria(df)
+        else:
+            df_filtered = df
 
         df_filtered.drop(
             ["timestamp_formatted", "source_name", "destination_name"],
@@ -532,12 +545,13 @@ class GraphProcessor:
         print(f"CSV created: {self.csv_output_path} with {len(df)} edges")
 
         # Create and save histogram
-        fig = self._create_histogram(df)
-        experiment_folder = f"experiments/optc_{self.host}"
-        create_folder(experiment_folder)
-        histogram_path = f"{experiment_folder}/data_split_histogram.png"
-        fig.savefig(histogram_path, dpi=300, bbox_inches="tight")
-        print(f"Histogram saved: {histogram_path}")
+        if self.aggregation:
+            fig = self._create_histogram(df)
+            experiment_folder = f"experiments/optc_{self.host}"
+            create_folder(experiment_folder)
+            histogram_path = f"{experiment_folder}/data_split_histogram.png"
+            fig.savefig(histogram_path, dpi=300, bbox_inches="tight")
+            print(f"Histogram saved: {histogram_path}")
 
         print("-" * 50)
         return True
@@ -607,11 +621,12 @@ def validate_paths(args):
 
 
 def main(
-    host, input_path, output_path, label_path, start_val, start_test, with_features, len_encode_path
-):
+    host, input_path, output_path, label_path, start_val, start_test, with_features, len_encode_path, aggregation = False):
+
+    print(aggregation)
 
     # Process the dataset
     processor = GraphProcessor(
-        host, input_path, output_path, label_path, start_val, start_test, with_features, len_encode_path
+        host, input_path, output_path, label_path, start_val, start_test, with_features, len_encode_path, aggregation
     )
     processor.process()

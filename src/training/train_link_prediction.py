@@ -46,11 +46,15 @@ def main(args):
         test_data,
         new_node_val_data,
         new_node_test_data,
+        cal_data,
     ) = get_link_prediction_data(
         dataset_name=args.dataset_name,
         val_start=args.start_val,
         test_start=args.start_test,
+        inductive=args.inductive,
+        calibration=args.calibration,
     )
+    
 
     # initialize training neighbor sampler to retrieve temporal graph
     train_neighbor_sampler = get_neighbor_sampler(
@@ -77,14 +81,16 @@ def main(args):
     val_neg_edge_sampler = NegativeEdgeSampler(
         src_node_ids=full_data.src_node_ids, dst_node_ids=full_data.dst_node_ids, negative_sample_strategy=args.negative_sample_strategy, seed=1
     )
-    new_node_val_neg_edge_sampler = NegativeEdgeSampler(
-        src_node_ids=new_node_val_data.src_node_ids,
-        dst_node_ids=new_node_val_data.dst_node_ids,
-        negative_sample_strategy=args.negative_sample_strategy,
-        seed=1,
-    )
+    if args.inductive:
+        new_node_val_neg_edge_sampler = NegativeEdgeSampler(
+            src_node_ids=new_node_val_data.src_node_ids,
+            dst_node_ids=new_node_val_data.dst_node_ids,
+            negative_sample_strategy=args.negative_sample_strategy,
+            seed=1,
+        )
     # test_neg_edge_sampler = NegativeEdgeSampler(src_node_ids=full_data.src_node_ids, dst_node_ids=full_data.dst_node_ids, seed=2)
     # new_node_test_neg_edge_sampler = NegativeEdgeSampler(src_node_ids=new_node_test_data.src_node_ids, dst_node_ids=new_node_test_data.dst_node_ids, seed=3)
+
 
     # get data loaders
     train_idx_data_loader = get_idx_data_loader(
@@ -97,13 +103,15 @@ def main(args):
         batch_size=args.batch_size,
         shuffle=False,
     )
-    new_node_val_idx_data_loader = get_idx_data_loader(
-        indices_list=list(range(len(new_node_val_data.src_node_ids))),
-        batch_size=args.batch_size,
-        shuffle=False,
-    )
+    if args.inductive:
+        new_node_val_idx_data_loader = get_idx_data_loader(
+            indices_list=list(range(len(new_node_val_data.src_node_ids))),
+            batch_size=args.batch_size,
+            shuffle=False,
+        )
     # test_idx_data_loader = get_idx_data_loader(indices_list=list(range(len(test_data.src_node_ids))), batch_size=args.batch_size, shuffle=False)
     # new_node_test_idx_data_loader = get_idx_data_loader(indices_list=list(range(len(new_node_test_data.src_node_ids))), batch_size=args.batch_size, shuffle=False)
+
 
     # val_metric_all_runs, new_node_val_metric_all_runs, test_metric_all_runs, new_node_test_metric_all_runs = [], [], [], []
 
@@ -113,7 +121,7 @@ def main(args):
         args.seed = run
         args.save_model_name = f"{args.model_name}_seed{args.seed}"
         args.experiment_folder = (
-            f"experiments/{args.dataset_name}/{args.model_name}/{args.save_model_name}"
+            f"experiments/{args.dataset_name}/{args.model_name.lower()}/{args.save_model_name}"
         )
         create_folder(args.experiment_folder)
 
@@ -476,18 +484,19 @@ def main(args):
                 # reload training memory bank for new validation nodes
                 model[0].memory_bank.reload_memory_bank(train_backup_memory_bank)
 
-            new_node_val_losses, new_node_val_metrics = evaluate_model_link_prediction(
-                model_name=args.model_name,
-                model=model,
-                neighbor_sampler=full_neighbor_sampler,
-                evaluate_idx_data_loader=new_node_val_idx_data_loader,
-                evaluate_neg_edge_sampler=new_node_val_neg_edge_sampler,
-                evaluate_data=new_node_val_data,
-                loss_func=loss_func,
-                num_neighbors=args.num_neighbors,
-                time_gap=args.time_gap,
-                temp=args.temperature,
-            )
+            if args.inductive:
+                new_node_val_losses, new_node_val_metrics = evaluate_model_link_prediction(
+                    model_name=args.model_name,
+                    model=model,
+                    neighbor_sampler=full_neighbor_sampler,
+                    evaluate_idx_data_loader=new_node_val_idx_data_loader,
+                    evaluate_neg_edge_sampler=new_node_val_neg_edge_sampler,
+                    evaluate_data=new_node_val_data,
+                    loss_func=loss_func,
+                    num_neighbors=args.num_neighbors,
+                    time_gap=args.time_gap,
+                    temp=args.temperature,
+                )
 
             if args.model_name in ["JODIE", "DyRep", "TGN"]:
                 # reload validation memory bank for testing nodes or saving models
@@ -506,11 +515,12 @@ def main(args):
                 logger.info(
                     f"validate {metric_name}, {np.mean([val_metric[metric_name] for val_metric in val_metrics]):.4f}"
                 )
-            logger.info(f"new node validate loss: {np.mean(new_node_val_losses):.4f}")
-            for metric_name in new_node_val_metrics[0].keys():
-                logger.info(
-                    f"new node validate {metric_name}, {np.mean([new_node_val_metric[metric_name] for new_node_val_metric in new_node_val_metrics]):.4f}"
-                )
+            if args.inductive:
+                logger.info(f"new node validate loss: {np.mean(new_node_val_losses):.4f}")
+                for metric_name in new_node_val_metrics[0].keys():
+                    logger.info(
+                        f"new node validate {metric_name}, {np.mean([new_node_val_metric[metric_name] for new_node_val_metric in new_node_val_metrics]):.4f}"
+                    )
 
             # perform testing once after test_interval_epochs
             # if (epoch + 1) % args.test_interval_epochs == 0:

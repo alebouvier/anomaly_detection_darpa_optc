@@ -72,18 +72,17 @@ class Data:
         self.num_unique_nodes = len(self.unique_node_ids)
 
 
-def get_calibration_data(train_Data):
-    # retrieve 10% of train Data randomly
-    calibration
 
 
 
-def get_link_prediction_data(dataset_name: str, val_start: float, test_start: float):
+def get_link_prediction_data(dataset_name: str, val_start: float, test_start: float, inductive: bool = False, calibration: bool = False):
     """
     generate data for link prediction task (inductive & transductive settings)
     :param dataset_name: str, dataset name
     :param val_ratio: float, validation data ratio
     :param test_ratio: float, test data ratio
+    :param inductive: boolean, whether to prepare data for inductive setting 
+    :param calibration: boolean, whether to prepare calibration data for conformal prediction
     :return: node_raw_features, edge_raw_features, (np.ndarray),
             full_data, train_data, val_data, test_data, new_node_val_data, new_node_test_data, (Data object)
     """
@@ -98,14 +97,14 @@ def get_link_prediction_data(dataset_name: str, val_start: float, test_start: fl
         f"{BASE}/processed_data/{dataset_name}/ml_{dataset_name}_node.npy"
     )
 
-    NODE_FEAT_DIM = EDGE_FEAT_DIM = 278
+    NODE_FEAT_DIM = EDGE_FEAT_DIM = 790
     assert NODE_FEAT_DIM >= node_raw_features.shape[1], (
         f"Node feature dimension in dataset {dataset_name} is bigger than {NODE_FEAT_DIM}!"
     )
     assert EDGE_FEAT_DIM >= edge_raw_features.shape[1], (
         f"Edge feature dimension in dataset {dataset_name} is bigger than {EDGE_FEAT_DIM}!"
     )
-    # padding the features of edges and nodes to the same dimension (278 for all the datasets)
+    # padding the features of edges and nodes to the same dimension (790 for all the datasets)
     if node_raw_features.shape[1] < NODE_FEAT_DIM:
         node_zero_padding = np.zeros(
             (node_raw_features.shape[0], NODE_FEAT_DIM - node_raw_features.shape[1])
@@ -158,7 +157,7 @@ def get_link_prediction_data(dataset_name: str, val_start: float, test_start: fl
     # sample nodes which we keep as new nodes (to test inductiveness), so then we have to remove all their edges from training
     new_test_node_set = set(
         random.sample(sorted(test_node_set), int(0.1 * num_total_unique_node_ids))
-    )  # Old  new_test_node_set = set(random.sample(test_node_set, int(0.1 * num_total_unique_node_ids)))
+    ) 
 
     # mask for each source and destination to denote whether they are new test nodes
     new_test_source_mask = graph_df.u.map(lambda x: x in new_test_node_set).values
@@ -169,15 +168,27 @@ def get_link_prediction_data(dataset_name: str, val_start: float, test_start: fl
         ~new_test_source_mask, ~new_test_destination_mask
     )
 
+    if inductive:
     # for train  and calibration data, we keep edges happening before the validation time which do not involve any new node, used for inductiveness
-    train_cal_mask = np.logical_and(node_interact_times <= val_time, observed_edges_mask)
+        train_cal_mask = np.logical_and(node_interact_times <= val_time, observed_edges_mask)
+    else:
+    # for train and calibration data, we keep edges happening before the validation time, used for transductive setting
+        train_cal_mask = node_interact_times <= val_time
 
-    cal_ids = random.sample(range(len(train_cal_mask))[train_cal_mask], int(0.1*np.sum(train_cal_mask)))
+    # randomly sample 10% of the train_cal_mask as calibration data, and the rest 90% as training data
+    cal_ids = random.sample(
+        list(np.where(train_cal_mask)[0]), int(0.1 * np.sum(train_cal_mask))
+    )
 
-    cal_mask = np.zeros(len(train_cal_mask))
-    cal_mask[cal_ids] = 1
+    cal_mask = np.zeros_like(train_cal_mask, dtype=bool)
+    cal_mask[cal_ids] = True
 
-    train_mask = np.logical_and(train_cal_mask, np.logical_not(cal_mask))
+    if calibration:
+        # if we want to prepare calibration data for conformal prediction, then we use the sampled 10% edges as calibration data and the rest 90% edges as training data        
+        train_mask = np.logical_and(train_cal_mask, ~cal_mask)
+    else:
+        # if we do not want to prepare calibration data, then we use all the edges before validation time as training data
+        train_mask = train_cal_mask
 
     train_data = Data(
         src_node_ids=src_node_ids[train_mask],
@@ -187,19 +198,23 @@ def get_link_prediction_data(dataset_name: str, val_start: float, test_start: fl
         labels=labels[train_mask],
     )
 
-    cal_data = Data(
-        src_node_ids=src_node_ids[cal_mask],
-        dst_node_ids=dst_node_ids[cal_mask],
-        node_interact_times=node_interact_times[cal_mask],
-        edge_ids=edge_ids[cal_mask],
-        labels=labels[cal_mask],
-    )
+    if calibration:
+        cal_data = Data(
+            src_node_ids=src_node_ids[cal_mask],
+            dst_node_ids=dst_node_ids[cal_mask],
+            node_interact_times=node_interact_times[cal_mask],
+            edge_ids=edge_ids[cal_mask],
+            labels=labels[cal_mask],
+        )
+    else:
+        cal_data = None
 
     
 
     # define the new nodes sets for testing inductiveness of the model
     train_node_set = set(train_data.src_node_ids).union(train_data.dst_node_ids)
-    assert len(train_node_set & new_test_node_set) == 0
+    if inductive:
+        assert len(train_node_set & new_test_node_set) == 0
     # new nodes that are not in the training set
     new_node_set = node_set - train_node_set
 
@@ -235,22 +250,26 @@ def get_link_prediction_data(dataset_name: str, val_start: float, test_start: fl
         labels=labels[test_mask],
     )
 
-    # validation and test with edges that at least has one new node (not in training set)
-    new_node_val_data = Data(
-        src_node_ids=src_node_ids[new_node_val_mask],
-        dst_node_ids=dst_node_ids[new_node_val_mask],
-        node_interact_times=node_interact_times[new_node_val_mask],
-        edge_ids=edge_ids[new_node_val_mask],
-        labels=labels[new_node_val_mask],
-    )
+    if inductive:
+        # validation and test with edges that at least has one new node (not in training set)
+        new_node_val_data = Data(
+            src_node_ids=src_node_ids[new_node_val_mask],
+            dst_node_ids=dst_node_ids[new_node_val_mask],
+            node_interact_times=node_interact_times[new_node_val_mask],
+            edge_ids=edge_ids[new_node_val_mask],
+            labels=labels[new_node_val_mask],
+        )
 
-    new_node_test_data = Data(
-        src_node_ids=src_node_ids[new_node_test_mask],
-        dst_node_ids=dst_node_ids[new_node_test_mask],
-        node_interact_times=node_interact_times[new_node_test_mask],
-        edge_ids=edge_ids[new_node_test_mask],
-        labels=labels[new_node_test_mask],
-    )
+        new_node_test_data = Data(
+            src_node_ids=src_node_ids[new_node_test_mask],
+            dst_node_ids=dst_node_ids[new_node_test_mask],
+            node_interact_times=node_interact_times[new_node_test_mask],
+            edge_ids=edge_ids[new_node_test_mask],
+            labels=labels[new_node_test_mask],
+        )
+    else:
+        new_node_val_data = None
+        new_node_test_data = None
 
     print(
         "The dataset has {} interactions, involving {} different nodes".format(
@@ -272,21 +291,22 @@ def get_link_prediction_data(dataset_name: str, val_start: float, test_start: fl
             test_data.num_interactions, test_data.num_unique_nodes
         )
     )
-    print(
-        "The new node validation dataset has {} interactions, involving {} different nodes".format(
-            new_node_val_data.num_interactions, new_node_val_data.num_unique_nodes
+    if inductive:
+        print(
+            "The new node validation dataset has {} interactions, involving {} different nodes".format(
+                new_node_val_data.num_interactions, new_node_val_data.num_unique_nodes
+            )
         )
-    )
-    print(
-        "The new node test dataset has {} interactions, involving {} different nodes".format(
-            new_node_test_data.num_interactions, new_node_test_data.num_unique_nodes
+        print(
+            "The new node test dataset has {} interactions, involving {} different nodes".format(
+                new_node_test_data.num_interactions, new_node_test_data.num_unique_nodes
+            )
         )
-    )
-    print(
-        "{} nodes were used for the inductive testing, i.e. are never seen during training".format(
-            len(new_test_node_set)
+        print(
+            "{} nodes were used for the inductive testing, i.e. are never seen during training".format(
+                len(new_test_node_set)
+            )
         )
-    )
 
     return (
         node_raw_features,
@@ -297,6 +317,7 @@ def get_link_prediction_data(dataset_name: str, val_start: float, test_start: fl
         test_data,
         new_node_val_data,
         new_node_test_data,
+        cal_data,
     )
 
 

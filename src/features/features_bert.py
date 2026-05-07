@@ -7,6 +7,7 @@ import numpy as np
 from tqdm import tqdm
 
 from features.bert import eval_for_encoding
+from peft import PeftModel
 
 from transformers import BertTokenizerFast, BertModel
 
@@ -106,20 +107,20 @@ class Encoding_builder:
             image_path = eval_for_encoding(
                 self.tokenizer, self.model, node.image_path, False, cfg=self.cfg
             )
-            # pp_path = eval_for_encoding(
-            #     self.tokenizer, self.model, node.parent_image_path, False, cfg=self.cfg
-            # )
-            # cmd_path = eval_for_encoding(
-            #     self.tokenizer, self.model, node.command_line, True, cfg=self.cfg
-            # )
+            pp_path = eval_for_encoding(
+                self.tokenizer, self.model, node.parent_image_path, False, cfg=self.cfg
+            )
+            cmd_path = eval_for_encoding(
+                self.tokenizer, self.model, node.command_line, True, cfg=self.cfg
+            )
             sid = encoding_sid([node.sid])
             p_and_son_ = encoding_parent_son(
                 copy.deepcopy(p_and_son), node.parent_image_path, node.image_path
             )
             features_e_g[node.id] = (  # Encoding of a process
                 image_path.tolist()
-                # + pp_path.tolist()
-                # + cmd_path.tolist()
+                + pp_path.tolist()
+                + cmd_path.tolist()
                 + sid
                 + p_and_son_
             )
@@ -131,8 +132,8 @@ class Encoding_builder:
 
             sids.append(node.sid)
             image_paths.append(image_path)
-            # parent_image_paths.append(pp_path)
-            # command_line_paths.append(cmd_path)
+            parent_image_paths.append(pp_path)
+            command_line_paths.append(cmd_path)
             parent_and_son = encoding_parent_son(
                 parent_and_son, node.parent_image_path, node.image_path
             )
@@ -377,8 +378,15 @@ def main( clients, graphs, model_w2v_path, dataset, g=False, e=False):
 
     data = load_pickle_file(graphs)
 
-    tokenizer = BertTokenizerFast.from_pretrained('google/bert_uncased_L-2_H-128_A-2')
-    model = BertModel.from_pretrained('google/bert_uncased_L-2_H-128_A-2')
+
+    bert_path = 'google/bert_uncased_L-2_H-128_A-2'
+
+    # bert_path = 'bert-base-uncased'
+    # bert_ft_path = f"{BASE}/feature_data/Bert_ft"
+
+    tokenizer = BertTokenizerFast.from_pretrained(bert_path)
+    model = BertModel.from_pretrained(bert_path)
+    # model = PeftModel.from_pretrained(model, bert_ft_path)
     model.eval()
 
     for c in clients:

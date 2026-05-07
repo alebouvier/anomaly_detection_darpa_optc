@@ -157,16 +157,15 @@ def eval_function_coeff_path_const(enc):
     return enc
 
 
-def get_word_embedding(word: str, tokenizer, model) -> torch.Tensor:
-    inputs = tokenizer(word, return_tensors="pt")
+def get_sequence_embedding(sequence: str, tokenizer, model) -> torch.Tensor:
+    inputs = tokenizer(sequence, return_tensors="pt")
 
     with torch.no_grad():
         outputs = model(**inputs)
 
-    # outputs.last_hidden_state shape: [batch, tokens, 128]
-    # Token 0 = [CLS], 1 = word, 2 = [SEP]
-    word_embedding = outputs.last_hidden_state[0, 1, :]  # shape: [128]
-    return word_embedding
+    
+    seq_embedding = outputs.last_hidden_state[0, 1, :]  # shape: [128]
+    return seq_embedding
 
 def eval(tokenizer, model, data, is_command, cfg, f="const", q=0.1):
     h = data[0]
@@ -175,27 +174,29 @@ def eval(tokenizer, model, data, is_command, cfg, f="const", q=0.1):
         last = 1
     else:
         last = 0
-    lst = []
+
     ulast = 1
-    for k, j in enumerate(h):
-        if f == "combine":
-            lst.append(eval_function_coeff_path_2combine(get_word_embedding(j, tokenizer, model), last, h, k))
 
-        elif f == "const":
-            lst.append(eval_function_coeff_path_const(get_word_embedding(j, tokenizer, model)))
+    # evaluate the embedding of the sequence of tokens
+    
 
-        elif f == "geo":
-            res, ulast = eval_function_coeff_path_decrois_geo(
-                get_word_embedding(j, tokenizer, model), last, h, k, ulast, q
-            )
-            lst.append(res)
+    if f == "combine":
+        seq_embedding = eval_function_coeff_path_2combine(get_sequence_embedding(" ".join(h), tokenizer, model), last, h, k)
 
-        else:
-            lst.append(get_word_embedding(j, tokenizer, model))
+    elif f == "const":
+        seq_embedding = eval_function_coeff_path_const(get_sequence_embedding(" ".join(h), tokenizer, model))
 
-    mean_emb = np.mean(np.array(lst), axis=0)
+    elif f == "geo":
+        res, ulast = eval_function_coeff_path_decrois_geo(
+            get_sequence_embedding(" ".join(h), tokenizer, model), last, h, k, ulast, q
+        )
+        
+
+    else:
+        seq_embedding = get_sequence_embedding(" ".join(h), tokenizer, model)
 
 
-    return tokenizer, model, mean_emb, data[2], data[3], data[4], h
+
+    return tokenizer, model, seq_embedding, data[2], data[3], data[4], h
 
 

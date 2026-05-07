@@ -5,7 +5,7 @@ from utils.load_configs import get_link_prediction_args
 
 from preprocessing.graphs import main as building_graphs
 from features.w2v import main as training_w2v
-from features.features import main as extract_features
+from features.features_w2v import main as extract_features
 from preprocessing.optc_data_preprocessor import main as graph_to_csv_preprocessor
 from preprocessing.preprocess_data import main as ml_data_preprocessor
 from training.train_link_prediction import main as training_link_prediction
@@ -63,6 +63,10 @@ if __name__ == "__main__":
         "--with_features", action="store_true", help="whether or not include features "
     )
 
+    parser.add_argument(
+        "--aggregation", action="store_true", help="whether or not aggregate timestamps"
+    )
+
     args = parser.parse_known_args()[0]
 
     try:
@@ -112,6 +116,7 @@ if __name__ == "__main__":
                     start_test,
                     args.with_features,
                     cfg_dataset["MODEL"]["LEN_ENCODE_PATH"],
+                    args.aggregation
                 )
                 ml_data_preprocessor(dataset_name, bipartite=False, node_feat_dim=cfg_dataset["MODEL"]["LEN_ENCODE_PATH"])
 
@@ -166,6 +171,7 @@ if __name__ == "__main__":
                     start_test,
                     args.with_features,
                     cfg_dataset["MODEL"]["LEN_ENCODE_PATH"],
+                    args.aggregation
                 )
                 ml_data_preprocessor(dataset_name, bipartite=False, node_feat_dim=cfg_dataset["MODEL"]["LEN_ENCODE_PATH"])
 
@@ -188,6 +194,7 @@ if __name__ == "__main__":
                     start_test,
                     args.with_features,
                     cfg_dataset["MODEL"]["LEN_ENCODE_PATH"],
+                    args.aggregation
                 )
                 ml_data_preprocessor(dataset_name, bipartite=False, node_feat_dim=cfg_dataset["MODEL"]["LEN_ENCODE_PATH"])
                 ML_args.dataset_name = f"optc_{client}"

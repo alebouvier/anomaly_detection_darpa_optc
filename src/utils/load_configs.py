@@ -36,7 +36,7 @@ def get_link_prediction_args(is_evaluation: bool = False):
             "optc_051",
         ],
     )
-    parser.add_argument("--batch_size", type=int, default=48, help="batch size")
+    parser.add_argument("--batch_size", type=int, default=256, help="batch size")
     parser.add_argument(
         "--model_name",
         type=str,
@@ -137,7 +137,7 @@ def get_link_prediction_args(is_evaluation: bool = False):
         help="maximal length of the input sequence of each node",
     )
     parser.add_argument(
-        "--learning_rate", type=float, default=0.0001, help="learning rate"
+        "--learning_rate", type=float, default=0.0002, help="learning rate"
     )
     parser.add_argument("--dropout", type=float, default=0.1, help="dropout rate")
     parser.add_argument("--num_epochs", type=int, default=1, help="number of epochs")
@@ -192,6 +192,27 @@ def get_link_prediction_args(is_evaluation: bool = False):
     )
     parser.add_argument(
         "--evaluate_test", action="store_true", help="Temperature for calibration"
+    )
+    parser.add_argument(
+        "--calibration", action="store_true", help="whether to prepare calibration data for conformal prediction"
+    )
+    parser.add_argument(
+        "--calibration_method",
+        type=str,
+        default="classic",
+        choices=["classic", "adaptive", "weighted"],
+        help="method for miscoverage evaluation and calibration",
+    )
+    parser.add_argument(
+        "--miscoverage_level",
+        type=float,
+        default=0.05,
+        help="miscoverage level for calibration",
+    )
+    parser.add_argument(
+        "--inductive",
+        action="store_true",
+        help="whether to prepare data for inductive setting (only applicable for link prediction task)",
     )
 
     try:

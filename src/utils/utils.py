@@ -1353,6 +1353,7 @@ class NegativeEdgeSampler(object):
                 [random_sample_dst_node_ids, unique_historical_edges_dst_node_ids]
             )
         else:
+            num_random_sample_edges = 0
             historical_sample_edge_node_indices = self.random_state.choice(
                 len(unique_historical_edges), size=size, replace=False
             )

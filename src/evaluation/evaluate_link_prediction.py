@@ -42,10 +42,13 @@ def main(args):
         test_data,
         new_node_val_data,
         new_node_test_data,
+        cal_data,
     ) = get_link_prediction_data(
         dataset_name=args.dataset_name,
         val_start=args.start_val,
         test_start=args.start_test,
+        inductive=args.inductive,
+        calibration=args.calibration,
     )
 
     # initialize validation and test neighbor sampler to retrieve temporal graph
@@ -61,30 +64,30 @@ def main(args):
     val_neg_edge_sampler = NegativeEdgeSampler(
         src_node_ids=full_data.src_node_ids, dst_node_ids=full_data.dst_node_ids, negative_sample_strategy=args.negative_sample_strategy, seed=0
     )
-    new_node_val_neg_edge_sampler = NegativeEdgeSampler(
-        src_node_ids=new_node_val_data.src_node_ids,
-        dst_node_ids=new_node_val_data.dst_node_ids,
-        negative_sample_strategy=args.negative_sample_strategy,
-        seed=1,
-    )
     test_neg_edge_sampler = NegativeEdgeSampler(
         src_node_ids=full_data.src_node_ids, dst_node_ids=full_data.dst_node_ids, negative_sample_strategy=args.negative_sample_strategy, seed=2
     )
-    new_node_test_neg_edge_sampler = NegativeEdgeSampler(
-        src_node_ids=new_node_test_data.src_node_ids,
-        dst_node_ids=new_node_test_data.dst_node_ids,
-        negative_sample_strategy=args.negative_sample_strategy,
-        seed=3,
-    )
+    if args.inductive:
+        new_node_val_neg_edge_sampler = NegativeEdgeSampler(
+            src_node_ids=new_node_val_data.src_node_ids,
+            dst_node_ids=new_node_val_data.dst_node_ids,
+            negative_sample_strategy=args.negative_sample_strategy,
+            seed=1,
+        )
+        new_node_test_neg_edge_sampler = NegativeEdgeSampler(
+            src_node_ids=new_node_test_data.src_node_ids,
+            dst_node_ids=new_node_test_data.dst_node_ids,
+            negative_sample_strategy=args.negative_sample_strategy,
+            seed=3,
+        )
+    if args.calibration:
+        cal_neg_edge_sampler = NegativeEdgeSampler(
+            src_node_ids=cal_data.src_node_ids, dst_node_ids=cal_data.dst_node_ids, negative_sample_strategy=args.negative_sample_strategy, seed=1
+        )
 
     # get data loaders
     val_idx_data_loader = get_idx_data_loader(
         indices_list=list(range(len(val_data.src_node_ids))),
-        batch_size=args.batch_size,
-        shuffle=False,
-    )
-    new_node_val_idx_data_loader = get_idx_data_loader(
-        indices_list=list(range(len(new_node_val_data.src_node_ids))),
         batch_size=args.batch_size,
         shuffle=False,
     )
@@ -93,11 +96,25 @@ def main(args):
         batch_size=args.batch_size,
         shuffle=False,
     )
-    new_node_test_idx_data_loader = get_idx_data_loader(
-        indices_list=list(range(len(new_node_test_data.src_node_ids))),
-        batch_size=args.batch_size,
-        shuffle=False,
-    )
+
+    if args.inductive:
+        new_node_val_idx_data_loader = get_idx_data_loader(
+            indices_list=list(range(len(new_node_val_data.src_node_ids))),
+            batch_size=args.batch_size,
+            shuffle=False,
+        )
+
+        new_node_test_idx_data_loader = get_idx_data_loader(
+            indices_list=list(range(len(new_node_test_data.src_node_ids))),
+            batch_size=args.batch_size,
+            shuffle=False,
+        )
+    if args.calibration:
+        cal_idx_data_loader = get_idx_data_loader(
+            indices_list=list(range(len(cal_data.src_node_ids))),
+            batch_size=args.batch_size,
+            shuffle=False,
+        )
 
     # we separately evaluate EdgeBank, since EdgeBank does not contain any trainable parameters and has a different evaluation pipeline
     if args.model_name == "EdgeBank":
@@ -125,7 +142,7 @@ def main(args):
             args.load_model_name = f"{args.model_name}_seed{args.seed}"
             args.save_result_name = f"{args.negative_sample_strategy}_negative_sampling_{args.model_name}_seed{args.seed}"
             args.experiment_folder = (
-                f"experiments/{args.dataset_name}/{args.model_name}"
+                f"experiments/{args.dataset_name}/{args.model_name.lower()}"
             )
             create_folder(args.experiment_folder)
 
@@ -290,26 +307,69 @@ def main(args):
                     full_return=True,
                     temp=args.temperature,
                 )
-                # timestamp_anomaly_result(val_predicted_links, val_actual_links, non_exist_links, validate = True, names = (args.dataset_name,args.model_name, args.temperature))
-
-                new_node_val_losses, new_node_val_metrics = (
-                    evaluate_model_link_prediction(
-                        model_name=args.model_name,
-                        model=model,
-                        neighbor_sampler=full_neighbor_sampler,
-                        evaluate_idx_data_loader=new_node_val_idx_data_loader,
-                        evaluate_neg_edge_sampler=new_node_val_neg_edge_sampler,
-                        evaluate_data=new_node_val_data,
-                        loss_func=loss_func,
-                        num_neighbors=args.num_neighbors,
-                        time_gap=args.time_gap,
-                        temp=args.temperature,
-                    )
+                val_score_folder = (
+                f"{BASE}/val_result_data/{args.dataset_name}/{args.model_name}"
                 )
+                create_folder(val_score_folder)
+                save_pkl(
+                    val_predicted_links, f"{val_score_folder}/val_predicted_links.pkl"
+                )
+                save_pkl(val_actual_links, f"{val_score_folder}/val_actual_links.pkl")
+                save_pkl(non_exist_links, f"{val_score_folder}/non_exist_links.pkl")
+
+                if args.inductive:
+                    new_node_val_losses, new_node_val_metrics = (
+                        evaluate_model_link_prediction(
+                            model_name=args.model_name,
+                            model=model,
+                            neighbor_sampler=full_neighbor_sampler,
+                            evaluate_idx_data_loader=new_node_val_idx_data_loader,
+                            evaluate_neg_edge_sampler=new_node_val_neg_edge_sampler,
+                            evaluate_data=new_node_val_data,
+                            loss_func=loss_func,
+                            num_neighbors=args.num_neighbors,
+                            time_gap=args.time_gap,
+                            temp=args.temperature,
+                        )
+                    )
 
             if args.model_name in ["JODIE", "DyRep", "TGN"]:
                 # the memory in the best model has seen the validation edges, we need to backup the memory for new testing nodes
                 val_backup_memory_bank = model[0].memory_bank.backup_memory_bank()
+
+            if args.calibration:
+                (
+                    cal_losses,
+                    cal_metrics,
+                    cal_predicted_links,
+                    cal_actual_links,
+                    non_exist_links,
+                ) = evaluate_model_link_prediction(
+                    model_name=args.model_name,
+                    model=model,
+                    neighbor_sampler=full_neighbor_sampler,
+                    evaluate_idx_data_loader=cal_idx_data_loader,
+                    evaluate_neg_edge_sampler=cal_neg_edge_sampler,
+                    evaluate_data=cal_data,
+                    loss_func=loss_func,
+                    num_neighbors=args.num_neighbors,
+                    time_gap=args.time_gap,
+                    full_return=True,
+                    temp=args.temperature,
+                )
+                cal_score_folder = (
+                    f"{BASE}/cal_result_data/{args.dataset_name}/{args.model_name}"
+                )
+                create_folder(cal_score_folder)
+                save_pkl(
+                    cal_predicted_links, f"{cal_score_folder}/cal_predicted_links.pkl"
+                )
+                save_pkl(cal_actual_links, f"{cal_score_folder}/cal_actual_links.pkl")
+                save_pkl(non_exist_links, f"{cal_score_folder}/non_exist_links.pkl")
+
+            if args.model_name in ["JODIE", "DyRep", "TGN"]:
+                # reload validation memory bank for new testing nodes
+                model[0].memory_bank.reload_memory_bank(val_backup_memory_bank)
 
             (
                 test_losses,
@@ -344,20 +404,21 @@ def main(args):
                 # reload validation memory bank for new testing nodes
                 model[0].memory_bank.reload_memory_bank(val_backup_memory_bank)
 
-            new_node_test_losses, new_node_test_metrics = (
-                evaluate_model_link_prediction(
-                    model_name=args.model_name,
-                    model=model,
-                    neighbor_sampler=full_neighbor_sampler,
-                    evaluate_idx_data_loader=new_node_test_idx_data_loader,
-                    evaluate_neg_edge_sampler=new_node_test_neg_edge_sampler,
-                    evaluate_data=new_node_test_data,
-                    loss_func=loss_func,
-                    num_neighbors=args.num_neighbors,
-                    time_gap=args.time_gap,
-                    temp=args.temperature,
+            if args.inductive:
+                new_node_test_losses, new_node_test_metrics = (
+                    evaluate_model_link_prediction(
+                        model_name=args.model_name,
+                        model=model,
+                        neighbor_sampler=full_neighbor_sampler,
+                        evaluate_idx_data_loader=new_node_test_idx_data_loader,
+                        evaluate_neg_edge_sampler=new_node_test_neg_edge_sampler,
+                        evaluate_data=new_node_test_data,
+                        loss_func=loss_func,
+                        num_neighbors=args.num_neighbors,
+                        time_gap=args.time_gap,
+                        temp=args.temperature,
+                    )
                 )
-            )
             # store the evaluation metrics at the current run
             (
                 val_metric_dict,
@@ -375,18 +436,19 @@ def main(args):
                     logger.info(f"val {metric_name}, {average_val_metric:.4f}")
                     val_metric_dict[metric_name] = average_val_metric
 
-                logger.info(f"new node val loss: {np.mean(new_node_val_losses):.4f}")
-                for metric_name in new_node_val_metrics[0].keys():
-                    average_new_node_val_metric = np.mean(
-                        [
-                            new_node_val_metric[metric_name]
-                            for new_node_val_metric in new_node_val_metrics
-                        ]
-                    )
-                    logger.info(
-                        f"new node val {metric_name}, {average_new_node_val_metric:.4f}"
-                    )
-                    new_node_val_metric_dict[metric_name] = average_new_node_val_metric
+                if args.inductive:
+                    logger.info(f"new node val loss: {np.mean(new_node_val_losses):.4f}")
+                    for metric_name in new_node_val_metrics[0].keys():
+                        average_new_node_val_metric = np.mean(
+                            [
+                                new_node_val_metric[metric_name]
+                                for new_node_val_metric in new_node_val_metrics
+                            ]
+                        )
+                        logger.info(
+                            f"new node val {metric_name}, {average_new_node_val_metric:.4f}"
+                        )
+                        new_node_val_metric_dict[metric_name] = average_new_node_val_metric
 
             logger.info(f"test loss: {np.mean(test_losses):.4f}")
             for metric_name in test_metrics[0].keys():
@@ -396,18 +458,19 @@ def main(args):
                 logger.info(f"test {metric_name}, {average_test_metric:.4f}")
                 test_metric_dict[metric_name] = average_test_metric
 
-            logger.info(f"new node test loss: {np.mean(new_node_test_losses):.4f}")
-            for metric_name in new_node_test_metrics[0].keys():
-                average_new_node_test_metric = np.mean(
-                    [
-                        new_node_test_metric[metric_name]
-                        for new_node_test_metric in new_node_test_metrics
-                    ]
-                )
-                logger.info(
-                    f"new node test {metric_name}, {average_new_node_test_metric:.4f}"
-                )
-                new_node_test_metric_dict[metric_name] = average_new_node_test_metric
+            if args.inductive:
+                logger.info(f"new node test loss: {np.mean(new_node_test_losses):.4f}")
+                for metric_name in new_node_test_metrics[0].keys():
+                    average_new_node_test_metric = np.mean(
+                        [
+                            new_node_test_metric[metric_name]
+                            for new_node_test_metric in new_node_test_metrics
+                        ]
+                    )
+                    logger.info(
+                        f"new node test {metric_name}, {average_new_node_test_metric:.4f}"
+                    )
+                    new_node_test_metric_dict[metric_name] = average_new_node_test_metric
 
             single_run_time = time.time() - run_start_time
             logger.info(f"Run {run + 1} cost {single_run_time:.2f} seconds.")
@@ -472,14 +535,15 @@ def main(args):
                     f"± {np.std([val_metric_single_run[metric_name] for val_metric_single_run in val_metric_all_runs], ddof=1):.4f}"
                 )
 
-            for metric_name in new_node_val_metric_all_runs[0].keys():
-                logger.info(
-                    f"new node validate {metric_name}, {[new_node_val_metric_single_run[metric_name] for new_node_val_metric_single_run in new_node_val_metric_all_runs]}"
-                )
-                logger.info(
-                    f"average new node validate {metric_name}, {np.mean([new_node_val_metric_single_run[metric_name] for new_node_val_metric_single_run in new_node_val_metric_all_runs]):.4f} "
-                    f"± {np.std([new_node_val_metric_single_run[metric_name] for new_node_val_metric_single_run in new_node_val_metric_all_runs], ddof=1):.4f}"
-                )
+            if args.inductive:
+                for metric_name in new_node_val_metric_all_runs[0].keys():
+                    logger.info(
+                        f"new node validate {metric_name}, {[new_node_val_metric_single_run[metric_name] for new_node_val_metric_single_run in new_node_val_metric_all_runs]}"
+                    )
+                    logger.info(
+                        f"average new node validate {metric_name}, {np.mean([new_node_val_metric_single_run[metric_name] for new_node_val_metric_single_run in new_node_val_metric_all_runs]):.4f} "
+                        f"± {np.std([new_node_val_metric_single_run[metric_name] for new_node_val_metric_single_run in new_node_val_metric_all_runs], ddof=1):.4f}"
+                    )
 
         if args.evaluate_test:
             for metric_name in test_metric_all_runs[0].keys():
@@ -491,13 +555,14 @@ def main(args):
                     f"± {np.std([test_metric_single_run[metric_name] for test_metric_single_run in test_metric_all_runs], ddof=1):.4f}"
                 )
 
-            for metric_name in new_node_test_metric_all_runs[0].keys():
-                logger.info(
-                    f"new node test {metric_name}, {[new_node_test_metric_single_run[metric_name] for new_node_test_metric_single_run in new_node_test_metric_all_runs]}"
-                )
-                logger.info(
-                    f"average new node test {metric_name}, {np.mean([new_node_test_metric_single_run[metric_name] for new_node_test_metric_single_run in new_node_test_metric_all_runs]):.4f} "
-                    f"± {np.std([new_node_test_metric_single_run[metric_name] for new_node_test_metric_single_run in new_node_test_metric_all_runs], ddof=1):.4f}"
-                )
+            if args.inductive:
+                for metric_name in new_node_test_metric_all_runs[0].keys():
+                    logger.info(
+                        f"new node test {metric_name}, {[new_node_test_metric_single_run[metric_name] for new_node_test_metric_single_run in new_node_test_metric_all_runs]}"
+                    )
+                    logger.info(
+                        f"average new node test {metric_name}, {np.mean([new_node_test_metric_single_run[metric_name] for new_node_test_metric_single_run in new_node_test_metric_all_runs]):.4f} "
+                        f"± {np.std([new_node_test_metric_single_run[metric_name] for new_node_test_metric_single_run in new_node_test_metric_all_runs], ddof=1):.4f}"
+                    )
 
     sys.exit()
