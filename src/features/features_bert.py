@@ -379,14 +379,14 @@ def main( clients, graphs, model_w2v_path, dataset, g=False, e=False):
     data = load_pickle_file(graphs)
 
 
-    bert_path = 'google/bert_uncased_L-2_H-128_A-2'
+    # bert_path = 'google/bert_uncased_L-2_H-128_A-2'
 
-    # bert_path = 'bert-base-uncased'
-    # bert_ft_path = f"{BASE}/feature_data/Bert_ft"
+    bert_path = 'bert-base-uncased'
+    bert_ft_path = f"{BASE}/feature_data/Bert_ft"
 
-    tokenizer = BertTokenizerFast.from_pretrained(bert_path)
+    tokenizer = BertTokenizerFast.from_pretrained(bert_path, do_lower_case=True)
     model = BertModel.from_pretrained(bert_path)
-    # model = PeftModel.from_pretrained(model, bert_ft_path)
+    model = PeftModel.from_pretrained(model, bert_ft_path)
     model.eval()
 
     for c in clients:

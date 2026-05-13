@@ -126,6 +126,9 @@ def get_link_prediction_data(dataset_name: str, val_start: float, test_start: fl
     ), "Unaligned feature dimensions after feature padding!"
 
     # get the timestamp of validate and test set
+    val_time, test_time = list(np.quantile(graph_df.ts, [(1 - val_ratio - test_ratio), (1 - test_ratio)]))
+
+    # get the timestamp of validate and test set
     val_time = dt.datetime.strptime(val_start, "%Y-%m-%dT%H:%M").timestamp()
     test_time = dt.datetime.strptime(test_start, "%Y-%m-%dT%H:%M").timestamp()
 

@@ -167,6 +167,14 @@ def get_sequence_embedding(sequence: str, tokenizer, model) -> torch.Tensor:
     seq_embedding = outputs.last_hidden_state[0, 1, :]  # shape: [128]
     return seq_embedding
 
+
+def encode_text(tokenizer, model, text, cfg):
+    if text is None or text == 0 or text == "":
+        return np.zeros(cfg["MODEL"]["LEN_ENCODE_PATH"])
+    seq_embedding = get_sequence_embedding(text, tokenizer, model)
+    return seq_embedding.detach().cpu().numpy()
+
+
 def eval(tokenizer, model, data, is_command, cfg, f="const", q=0.1):
     h = data[0]
     ext = data[1]
