@@ -214,6 +214,11 @@ def get_link_prediction_args(is_evaluation: bool = False):
         action="store_true",
         help="whether to prepare data for inductive setting (only applicable for link prediction task)",
     )
+    parser.add_argument(
+        "--anomaly_injection",
+        action="store_true",
+        help="whether to put anomalous nodes in train data",
+    )
 
     try:
         args = parser.parse_known_args()[0]

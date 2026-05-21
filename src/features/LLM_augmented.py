@@ -1,10 +1,94 @@
+import ast
 import re
 import json
-import anthropic
+import google.generativeai as genai
 from dataclasses import dataclass
 from features.system_prompt import SYSTEM_PROMPT, FALLBACK_BATCH_SYSTEM_PROMPT, TEMPLATE_GENERATION_SYSTEM_PROMPT
 
-client = anthropic.Anthropic()
+
+genai.configure(api_key="AIzaSyCUzeOP2HNOgyxFwOLKTMja7tXElGalmGM")  # free at aistudio.google.com
+
+
+def _strip_markdown_codeblock(text: str) -> str:
+    text = text.strip()
+    if text.startswith("```"):
+        lines = text.split("\n")
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            text = "\n".join(lines).strip()
+    return text
+
+
+def _normalize_quotes_and_commas(text: str) -> str:
+    text = text.replace("“", '"').replace("”", '"')
+    text = text.replace("‘", "'").replace("’", "'")
+    text = re.sub(r',\s*(?=[}\]])', '', text)
+    return text
+
+
+def _extract_json_text(text: str) -> str:
+    # Keep only the first JSON object/array block
+    first_bracket = min(
+        [idx for idx in (text.find('['), text.find('{')) if idx != -1],
+        default=-1,
+    )
+    if first_bracket == -1:
+        return text
+
+    bracket = text[first_bracket]
+    closing = ']' if bracket == '[' else '}'
+    depth = 0
+    in_string = False
+    escape = False
+
+    for idx, ch in enumerate(text[first_bracket:], start=first_bracket):
+        if escape:
+            escape = False
+            continue
+        if ch == '\\':
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == bracket:
+            depth += 1
+        elif ch == closing:
+            depth -= 1
+            if depth == 0:
+                return text[first_bracket:idx + 1]
+
+    return text[first_bracket:]
+
+
+def extract_json_from_response(response_text: str) -> dict | list:
+    """
+    Extract JSON from response, handling markdown code blocks and lenient formatting.
+    """
+    text = _strip_markdown_codeblock(response_text)
+    text = _extract_json_text(text)
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        fallback = _normalize_quotes_and_commas(text)
+        try:
+            return json.loads(fallback)
+        except json.JSONDecodeError:
+            # As a last resort, attempt Python literal evaluation of relaxed JSON
+            fallback = fallback.replace("null", "None").replace("true", "True").replace("false", "False")
+            try:
+                return ast.literal_eval(fallback)
+            except Exception as exc:
+                raise json.JSONDecodeError(
+                    f"Unable to parse JSON from model response: {exc}",
+                    response_text,
+                    0,
+                )
 
 
 # --- Step 1: Sample a representative subset of your logs ---
@@ -43,11 +127,12 @@ def generate_template_library(sampled_logs: list[dict]) -> list[dict]:
         "parent_image": l.get("parent_image_path", "")
     } for l in sampled_logs], indent=2)
 
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=4000,
-        system=TEMPLATE_GENERATION_SYSTEM_PROMPT,  # reuse from previous step
-        messages=[{"role": "user", "content": f"""Analyze these eCar log samples and extract \
+    model = genai.GenerativeModel(
+        model_name="gemini-2.5-flash",
+        system_instruction=TEMPLATE_GENERATION_SYSTEM_PROMPT,
+    )
+    response = model.generate_content(
+        f"""Analyze these eCar log samples and extract \
 a reusable TEMPLATE LIBRARY.
 
 For each distinct behavioral pattern you identify, produce:
@@ -57,13 +142,15 @@ For each distinct behavioral pattern you identify, produce:
   (use {{command_line}}, {{image_path}}, {{parent_image}}, {{filename}}, {{args}})
 - "threat_level": benign | suspicious | malicious
 
-Return ONLY a JSON array, no markdown.
+Return ONLY VALID JSON. Do not include markdown, comments, or any surrounding text.
+Escape all quotes, backslashes, and newline characters inside string values.
 
 Logs sample:
-{formatted}"""}]
+{formatted}""",
+        generation_config=genai.types.GenerationConfig(max_output_tokens=4000),
     )
 
-    return json.loads(response.content[0].text)
+    return extract_json_from_response(response.text)
 
 
 # --- Step 3: Apply templates locally at scale ---
@@ -122,19 +209,22 @@ def enrich_batch(logs: list[dict], batch_size: int = 20) -> list[str]:
             "parent_image": l.get("parent_image_path", "")
         } for idx, l in enumerate(batch)], indent=2)
 
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=2000,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": f"""Enrich each eCar log below with a \
+        model = genai.GenerativeModel(
+            model_name="gemini-2.5-flash",
+            system_instruction=SYSTEM_PROMPT,
+        )
+        response = model.generate_content(
+            f"""Enrich each eCar log below with a \
 3-sentence semantic description (same rules as before).
-Return ONLY a JSON array of {{"id": int, "description": str}}, no markdown.
+Return ONLY VALID JSON. Do not include markdown, comments, or any surrounding text.
+Escape all quotes, backslashes, and newline characters inside string values.
 
 Logs:
-{formatted}"""}]
+{formatted}""",
+            generation_config=genai.types.GenerationConfig(max_output_tokens=2000),
         )
 
-        batch_results = json.loads(response.content[0].text)
+        batch_results = extract_json_from_response(response.text)
         # Sort by id to preserve order
         batch_results.sort(key=lambda x: x["id"])
         results.extend([r["description"] for r in batch_results])

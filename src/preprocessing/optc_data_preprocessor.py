@@ -36,7 +36,7 @@ class GraphProcessor:
         
         # Fixed parameters
         self.time_interval = 15  # minutes
-        self.num_features = len_encode_path * 3 + 11
+        self.num_features = len_encode_path * 1 + 11
         self.min_events_threshold = 2000  # Minimum events per timestamp
 
         # Load anomaly IDs

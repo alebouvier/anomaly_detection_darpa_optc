@@ -53,6 +53,8 @@ def main(args):
         test_start=args.start_test,
         inductive=args.inductive,
         calibration=args.calibration,
+        anomaly_injection=args.anomaly_injection,
+        sanity_check=True
     )
     
 
@@ -74,9 +76,12 @@ def main(args):
 
     # initialize negative samplers, set seeds for validation and testing so negatives are the same across different runs
     # in the inductive setting, negatives are sampled only amongst other new nodes
-    # train negative edge sampler does not need to specify the seed, but evaluation samplers need to do so
+    # train negative edge sampler does not need a seed for random sampling, but non-random training samplers should be seeded
     train_neg_edge_sampler = NegativeEdgeSampler(
-        src_node_ids=train_data.src_node_ids, dst_node_ids=train_data.dst_node_ids, negative_sample_strategy=args.negative_sample_strategy
+        src_node_ids=train_data.src_node_ids,
+        dst_node_ids=train_data.dst_node_ids,
+        negative_sample_strategy=args.negative_sample_strategy,
+        seed=0 if args.negative_sample_strategy != "random" else None,
     )
     val_neg_edge_sampler = NegativeEdgeSampler(
         src_node_ids=full_data.src_node_ids, dst_node_ids=full_data.dst_node_ids, negative_sample_strategy=args.negative_sample_strategy, seed=1
@@ -109,6 +114,7 @@ def main(args):
             batch_size=args.batch_size,
             shuffle=False,
         )
+
     # test_idx_data_loader = get_idx_data_loader(indices_list=list(range(len(test_data.src_node_ids))), batch_size=args.batch_size, shuffle=False)
     # new_node_test_idx_data_loader = get_idx_data_loader(indices_list=list(range(len(new_node_test_data.src_node_ids))), batch_size=args.batch_size, shuffle=False)
 
@@ -124,6 +130,10 @@ def main(args):
             f"experiments/{args.dataset_name}/{args.model_name.lower()}/{args.save_model_name}"
         )
         create_folder(args.experiment_folder)
+
+        batch_historical_ratios = []
+        global_historical_edges = 0
+        global_random_edges = 0
 
         # set up logger
         logging.basicConfig(level=logging.INFO)
@@ -296,10 +306,26 @@ def main(args):
                     train_data.edge_ids[train_data_indices],
                 )
 
-                _, batch_neg_dst_node_ids = train_neg_edge_sampler.sample(
-                    size=len(batch_src_node_ids)
+                _, batch_neg_dst_node_ids, num_preferred_sample_edges, num_random_sample_edges = (
+                    train_neg_edge_sampler.sample(
+                        size=len(batch_src_node_ids),
+                        batch_src_node_ids=batch_src_node_ids,
+                        batch_dst_node_ids=batch_dst_node_ids,
+                        current_batch_start_time=float(np.min(batch_node_interact_times)),
+                        current_batch_end_time=float(np.max(batch_node_interact_times)),
+                        return_sampling_counts=True,
+                    )
                 )
                 batch_neg_src_node_ids = batch_src_node_ids
+
+                if args.negative_sample_strategy == "historical":
+                    global_historical_edges += num_preferred_sample_edges
+                    batch_historical_ratios.append(
+                        num_preferred_sample_edges / len(batch_src_node_ids)
+                    )
+                else:
+                    batch_historical_ratios.append(0.0)
+                global_random_edges += num_random_sample_edges
 
                 # we need to compute for positive and negative edges respectively, because the new sampling strategy (for evaluation) allows the negative source nodes to be
                 # different from the source nodes, this is different from previous works that just replace destination nodes with negative destination nodes
@@ -476,6 +502,15 @@ def main(args):
             val_loss_per_batch.extend(val_batch_losses)
             epoch_val_loss = np.mean(val_losses)
             val_loss_history.append(epoch_val_loss)
+
+            total_sampled_edges = global_historical_edges + global_random_edges
+            average_batch_historical_proportion = np.mean(batch_historical_ratios) if len(batch_historical_ratios) > 0 else 0.0
+            logger.info(
+                f"Training negative sampling proportions: global historical edges = {global_historical_edges}, "
+                f"global random edges = {global_random_edges}, "
+                f"global historical proportion = {(global_historical_edges / total_sampled_edges if total_sampled_edges > 0 else 0.0):.4f}, "
+                f"average batch historical proportion = {average_batch_historical_proportion:.4f}"
+            )
 
             if args.model_name in ["JODIE", "DyRep", "TGN"]:
                 # backup memory bank after validating so it can be used for testing nodes (since test edges are strictly later in time than validation edges)

@@ -1,4 +1,5 @@
 from torch.utils.data import Dataset, DataLoader
+from utils.sanity_check import compute_sanity_check
 import numpy as np
 import random
 import pandas as pd
@@ -75,7 +76,14 @@ class Data:
 
 
 
-def get_link_prediction_data(dataset_name: str, val_start: float, test_start: float, inductive: bool = False, calibration: bool = False):
+def get_link_prediction_data(
+            dataset_name: str, 
+            val_start: float, 
+            test_start: float, 
+            inductive: bool = False, 
+            calibration: bool = False, 
+            anomaly_injection: bool = False,
+            sanity_check: bool = False):
     """
     generate data for link prediction task (inductive & transductive settings)
     :param dataset_name: str, dataset name
@@ -97,7 +105,7 @@ def get_link_prediction_data(dataset_name: str, val_start: float, test_start: fl
         f"{BASE}/processed_data/{dataset_name}/ml_{dataset_name}_node.npy"
     )
 
-    NODE_FEAT_DIM = EDGE_FEAT_DIM = 790
+    NODE_FEAT_DIM = EDGE_FEAT_DIM = edge_raw_features.shape[1]
     assert NODE_FEAT_DIM >= node_raw_features.shape[1], (
         f"Node feature dimension in dataset {dataset_name} is bigger than {NODE_FEAT_DIM}!"
     )
@@ -125,8 +133,6 @@ def get_link_prediction_data(dataset_name: str, val_start: float, test_start: fl
         and EDGE_FEAT_DIM == edge_raw_features.shape[1]
     ), "Unaligned feature dimensions after feature padding!"
 
-    # get the timestamp of validate and test set
-    val_time, test_time = list(np.quantile(graph_df.ts, [(1 - val_ratio - test_ratio), (1 - test_ratio)]))
 
     # get the timestamp of validate and test set
     val_time = dt.datetime.strptime(val_start, "%Y-%m-%dT%H:%M").timestamp()
@@ -192,6 +198,45 @@ def get_link_prediction_data(dataset_name: str, val_start: float, test_start: fl
     else:
         # if we do not want to prepare calibration data, then we use all the edges before validation time as training data
         train_mask = train_cal_mask
+
+    if anomaly_injection:
+        train_nodes = set(src_node_ids[train_mask]) | set(dst_node_ids[train_mask])
+
+        anomaly_mask = labels == 1
+        anomalous_src = src_node_ids[anomaly_mask]
+        anomalous_dst = dst_node_ids[anomaly_mask]
+
+        # Split by leakage level
+        both_seen = []
+        one_seen = []
+        none_seen = []
+
+        for s, d in zip(anomalous_src, anomalous_dst):
+            s_in = s in train_nodes
+            d_in = d in train_nodes
+            if s_in and d_in:
+                both_seen.append((s, d))
+            elif s_in or d_in:
+                one_seen.append((s, d))
+            else:
+                none_seen.append((s, d))
+
+        print(f"Both nodes in train : {len(both_seen)}  → zero leakage")
+        print(f"One node in train   : {len(one_seen)}   → small leakage")
+        print(f"No node in train    : {len(none_seen)}  → full leakage")
+
+        anomalous_nodes = set(anomalous_src) | set(anomalous_dst)
+
+
+
+        for i, node in enumerate(anomalous_nodes):
+            if node not in train_nodes:
+                if node in src_node_ids:
+                    edge_index = np.where(src_node_ids == node)[0][0]
+                else:
+                    edge_index = np.where(dst_node_ids == node)[0][0]
+                train_mask[edge_index] = True
+        
 
     train_data = Data(
         src_node_ids=src_node_ids[train_mask],
@@ -310,6 +355,9 @@ def get_link_prediction_data(dataset_name: str, val_start: float, test_start: fl
                 len(new_test_node_set)
             )
         )
+    
+    if sanity_check:
+        compute_sanity_check(train_data, val_data, test_data)
 
     return (
         node_raw_features,
@@ -346,7 +394,7 @@ def get_node_classification_data(
         "data/processed_data/{}/ml_{}_node.npy".format(dataset_name, dataset_name)
     )
 
-    NODE_FEAT_DIM = EDGE_FEAT_DIM = 278
+    NODE_FEAT_DIM = EDGE_FEAT_DIM = 2000
     assert NODE_FEAT_DIM >= node_raw_features.shape[1], (
         f"Node feature dimension in dataset {dataset_name} is bigger than {NODE_FEAT_DIM}!"
     )

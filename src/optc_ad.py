@@ -1,10 +1,10 @@
 import argparse
 
-from preprocessing.sanity_check import main as sanity_check
 from utils.utils import BASE, open_config
 from utils.load_configs import get_link_prediction_args
 
 from preprocessing.graphs import main as building_graphs
+from preprocessing.logs_analysis import main as analyse_log
 from features.w2v import main as training_w2v
 from features.features_w2v import main as extract_features
 from features.features_bert import main as extract_features_bert
@@ -95,6 +95,9 @@ if __name__ == "__main__":
         cfg_dataset = open_config(dataset)
 
         task = args.task
+        if task == "log_analysis":
+            analyse_log(clients, logs, dataset)
+
         if task == "graph":  # construction of all graphs
             building_graphs(clients, duration, logs, dataset)
 
@@ -102,7 +105,7 @@ if __name__ == "__main__":
             training_w2v(clients, cmds, data=dataset, is_path=False)
             training_w2v(clients, paths, data=dataset)
 
-        elif task == "feature":  # extraction of features using Word2Vec / existing path model
+        elif task == "feature_w2v":  # extraction of features using Word2Vec / existing path model
             extract_features(clients, graphs, model_w2v_path, dataset)
 
         elif task == "feature_bert":
@@ -134,10 +137,6 @@ if __name__ == "__main__":
                 dataset_name = f"optc_{client}"
                 ml_data_preprocessor(dataset_name, bipartite=False, node_feat_dim=cfg_dataset["MODEL"]["LEN_ENCODE_PATH"])
         
-        elif task == "sanity_check":
-            for client in clients:
-                dataset_name = f"optc_{client}"
-                sanity_check(dataset_name, start_val, start_test)
 
         elif task == "train_link_prediction":
             train_link_prediction_args = get_link_prediction_args(is_evaluation=False)
