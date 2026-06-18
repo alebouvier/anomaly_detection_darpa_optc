@@ -77,9 +77,11 @@ class Data:
 
 
 def get_link_prediction_data(
-            dataset_name: str, 
+            dataset_name: str,
+            train_start: float, 
             val_start: float, 
             test_start: float, 
+            test_end: float,
             inductive: bool = False, 
             calibration: bool = False, 
             anomaly_injection: bool = False,
@@ -87,8 +89,10 @@ def get_link_prediction_data(
     """
     generate data for link prediction task (inductive & transductive settings)
     :param dataset_name: str, dataset name
-    :param val_ratio: float, validation data ratio
-    :param test_ratio: float, test data ratio
+    :param train_start: float, start time of training set
+    :param val_start: float, start time of validation set
+    :param test_start: float, start time of test set
+    :param test_end: float, end time of test set
     :param inductive: boolean, whether to prepare data for inductive setting 
     :param calibration: boolean, whether to prepare calibration data for conformal prediction
     :return: node_raw_features, edge_raw_features, (np.ndarray),
@@ -135,8 +139,10 @@ def get_link_prediction_data(
 
 
     # get the timestamp of validate and test set
+    train_time = dt.datetime.strptime(train_start, "%Y-%m-%dT%H:%M").timestamp()
     val_time = dt.datetime.strptime(val_start, "%Y-%m-%dT%H:%M").timestamp()
     test_time = dt.datetime.strptime(test_start, "%Y-%m-%dT%H:%M").timestamp()
+    end_test_time = dt.datetime.strptime(test_end, "%Y-%m-%dT%H:%M").timestamp()
 
     src_node_ids = graph_df.u.values.astype(np.longlong)
     dst_node_ids = graph_df.i.values.astype(np.longlong)
@@ -159,30 +165,31 @@ def get_link_prediction_data(
     node_set = set(src_node_ids) | set(dst_node_ids)
     num_total_unique_node_ids = len(node_set)
 
-    # compute nodes which appear at test time
-    test_node_set = set(src_node_ids[node_interact_times > val_time]).union(
-        set(dst_node_ids[node_interact_times > val_time])
+    # compute nodes which appear at test time (> val_time, < end_test_time) 
+    test_node_set = set(src_node_ids[(node_interact_times > val_time) & (node_interact_times < end_test_time)]).union(
+        set(dst_node_ids[(node_interact_times > val_time) & (node_interact_times < end_test_time)])
     )
-    # sample nodes which we keep as new nodes (to test inductiveness), so then we have to remove all their edges from training
-    new_test_node_set = set(
-        random.sample(sorted(test_node_set), int(0.1 * num_total_unique_node_ids))
-    ) 
 
-    # mask for each source and destination to denote whether they are new test nodes
-    new_test_source_mask = graph_df.u.map(lambda x: x in new_test_node_set).values
-    new_test_destination_mask = graph_df.i.map(lambda x: x in new_test_node_set).values
-
-    # mask, which is true for edges with both destination and source not being new test nodes (because we want to remove all edges involving any new test node)
-    observed_edges_mask = np.logical_and(
-        ~new_test_source_mask, ~new_test_destination_mask
-    )
 
     if inductive:
-    # for train  and calibration data, we keep edges happening before the validation time which do not involve any new node, used for inductiveness
-        train_cal_mask = np.logical_and(node_interact_times <= val_time, observed_edges_mask)
+    # sample nodes which we keep as new nodes (to test inductiveness), so then we have to remove all their edges from training
+        new_test_node_set = set(
+            random.sample(sorted(test_node_set), int(0.1 * num_total_unique_node_ids))
+        ) 
+
+        # mask for each source and destination to denote whether they are new test nodes
+        new_test_source_mask = graph_df.u.map(lambda x: x in new_test_node_set).values
+        new_test_destination_mask = graph_df.i.map(lambda x: x in new_test_node_set).values
+
+        # mask, which is true for edges with both destination and source not being new test nodes (because we want to remove all edges involving any new test node)
+        observed_edges_mask = np.logical_and(
+            ~new_test_source_mask, ~new_test_destination_mask
+        )
+    # for train  and calibration data, we keep edges happening before the validation time and after train_time which do not involve any new node, used for inductiveness
+        train_cal_mask = np.logical_and(np.logical_and(node_interact_times <= val_time, node_interact_times >= train_time), observed_edges_mask)
     else:
-    # for train and calibration data, we keep edges happening before the validation time, used for transductive setting
-        train_cal_mask = node_interact_times <= val_time
+    # for train and calibration data, we keep edges happening before the validation time and after train_time, used for transductive setting
+        train_cal_mask = np.logical_and(node_interact_times <= val_time, node_interact_times >= train_time)
 
     # randomly sample 10% of the train_cal_mask as calibration data, and the rest 90% as training data
     cal_ids = random.sample(
@@ -269,8 +276,9 @@ def get_link_prediction_data(
     val_mask = np.logical_and(
         node_interact_times <= test_time, node_interact_times > val_time
     )
-    test_mask = node_interact_times > test_time
-
+    test_mask = np.logical_and(
+        node_interact_times <= end_test_time, node_interact_times > test_time
+    )
     # new edges with new nodes in the val and test set (for inductive evaluation)
     edge_contains_new_node_mask = np.array(
         [

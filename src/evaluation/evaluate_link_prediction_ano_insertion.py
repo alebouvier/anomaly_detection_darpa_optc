@@ -23,6 +23,7 @@ from utils.utils import (
 from utils.utils import get_neighbor_sampler, NegativeEdgeSampler, BASE
 from evaluation.evaluate_models_utils import (
     evaluate_model_link_prediction,
+    evaluate_model_link_prediction_ano_insertion,
     evaluate_edge_bank_link_prediction,
 )
 from utils.DataLoader import get_idx_data_loader, get_link_prediction_data
@@ -306,7 +307,7 @@ def main(args):
                     val_predicted_links,
                     val_actual_links,
                     non_exist_links,
-                ) = evaluate_model_link_prediction(
+                ) = evaluate_model_link_prediction_ano_insertion(
                     model_name=args.model_name,
                     model=model,
                     neighbor_sampler=full_neighbor_sampler,
@@ -331,7 +332,7 @@ def main(args):
 
                 if args.inductive:
                     new_node_val_losses, new_node_val_metrics = (
-                        evaluate_model_link_prediction(
+                        evaluate_model_link_prediction_ano_insertion(
                             model_name=args.model_name,
                             model=model,
                             neighbor_sampler=full_neighbor_sampler,

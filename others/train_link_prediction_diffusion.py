@@ -31,7 +31,7 @@ from evaluation.evaluate_models_utils import evaluate_model_link_prediction
 from utils.metrics import get_link_prediction_metrics
 from utils.DataLoader import get_idx_data_loader, get_link_prediction_data
 from utils.EarlyStopping import EarlyStopping
-
+from utils.diffusion import Diffusion_Cond
 
 def main(args):
 
@@ -65,7 +65,21 @@ def main(args):
         neighbors_2hop = pd.read_csv(f"{BASE}/processed_data/{args.dataset_name}/two_hop_non_neighbors.csv")
     else:
         neighbors_2hop = None
-    
+
+    # TODO: create diffusion model
+    in_feat_dim = 33
+    out_feat_dim = 33
+    timesteps = 50
+    y = in_feat_dim
+    diffusion = Diffusion_Cond(in_feat_dim, out_feat_dim, timesteps, y).to(
+        args.device
+    )
+    d_optimizer = torch.optim.Adam(
+        diffusion.parameters(),
+        lr=args.learning_rate,
+        weight_decay=args.weight_decay,
+    )
+
 
     # initialize training neighbor sampler to retrieve temporal graph
     train_neighbor_sampler = get_neighbor_sampler(
@@ -340,6 +354,37 @@ def main(args):
                     batch_preferred_ratios.append(0.0)
                 global_random_edges += num_random_sample_edges
 
+                # TODO: find all historical neighbors of source nodes
+                neighbor_node_ids, neighbor_edge_ids, neighbor_times = train_neighbor_sampler.get_historical_neighbors(
+                    batch_src_node_ids,
+                    batch_node_interact_times,
+                    num_neighbors=args.num_neighbors,
+                )
+                batch_size = len(batch_src_node_ids)
+                batch_neighbors_src_node_ids = np.repeat(batch_src_node_ids, args.num_neighbors)
+                batch_neighbors_dst_node_ids = np.zeros(
+                    shape=(batch_size * args.num_neighbors,), dtype=np.int64
+                )
+                batch_neighbors_node_interact_times = np.zeros(
+                    shape=(batch_size * args.num_neighbors,), dtype=np.float64
+                )
+
+                valid_mask = neighbor_node_ids != 0
+                for i in range(batch_size):
+                    start = i * args.num_neighbors
+                    end = start + args.num_neighbors
+                    if not valid_mask[i].any():
+                        batch_neighbors_dst_node_ids[start:end] = batch_src_node_ids[i]
+                        batch_neighbors_node_interact_times[start:end] = batch_node_interact_times[i]
+                        continue
+
+                    valid_neighbors = neighbor_node_ids[i, valid_mask[i]]
+                    valid_times = neighbor_times[i, valid_mask[i]]
+                    repeated_indices = np.arange(args.num_neighbors) % len(valid_neighbors)
+                    batch_neighbors_dst_node_ids[start:end] = valid_neighbors[repeated_indices]
+                    batch_neighbors_node_interact_times[start:end] = valid_times[repeated_indices]
+
+
                 # we need to compute for positive and negative edges respectively, because the new sampling strategy (for evaluation) allows the negative source nodes to be
                 # different from the source nodes, this is different from previous works that just replace destination nodes with negative destination nodes
                 if args.model_name in ["TGAT", "CAWN", "TCL"]:
@@ -364,6 +409,29 @@ def main(args):
                             num_neighbors=args.num_neighbors,
                         )
                     )
+
+                    # TODO: get temporal embedding of source neighbors nodes
+                    batch_neighbors_src_node_embeddings = batch_src_node_embeddings.repeat_interleave(
+                        args.num_neighbors, dim=0
+                    )
+
+                    # TODO: get temporal embedding of destination neighbors nodes
+                    unique_neighbors, inverse_indices = np.unique(
+                        np.stack(
+                            [batch_neighbors_dst_node_ids, batch_neighbors_node_interact_times],
+                            axis=1,
+                        ),
+                        axis=0,
+                        return_inverse=True,
+                    )
+                    batch_neighbors_dst_node_embeddings = (
+                        model[0].compute_node_temporal_embeddings(
+                            node_ids=unique_neighbors[:, 0].astype(np.int64),
+                            node_interact_times=unique_neighbors[:, 1].astype(np.float64),
+                            num_neighbors=args.num_neighbors,
+                        )
+                    )[inverse_indices]
+        
                 elif args.model_name in ["GraphMixer"]:
                     # get temporal embedding of source and destination nodes
                     # two Tensors, with shape (batch_size, node_feat_dim)
@@ -388,6 +456,29 @@ def main(args):
                             time_gap=args.time_gap,
                         )
                     )
+
+                    # TODO: get temporal embedding of source neighbors nodes
+                    batch_neighbors_src_node_embeddings = batch_src_node_embeddings.repeat_interleave(
+                        args.num_neighbors, dim=0
+                    )
+
+                    # TODO: get temporal embedding of neigbors nodes
+                    unique_neighbors, inverse_indices = np.unique(
+                        np.stack(
+                            [batch_neighbors_dst_node_ids, batch_neighbors_node_interact_times],
+                            axis=1,
+                        ),
+                        axis=0,
+                        return_inverse=True,
+                    )
+                    batch_neighbors_dst_node_embeddings = (
+                        model[0].compute_node_temporal_embeddings(
+                            node_ids=unique_neighbors[:, 0].astype(np.int64),
+                            node_interact_times=unique_neighbors[:, 1].astype(np.float64),
+                            num_neighbors=args.num_neighbors,
+                        )
+                    )[inverse_indices]
+
                 elif args.model_name in ["DyGFormer"]:
                     # get temporal embedding of source and destination nodes
                     # two Tensors, with shape (batch_size, node_feat_dim)
@@ -408,6 +499,30 @@ def main(args):
                             node_interact_times=batch_node_interact_times,
                         )
                     )
+
+                    # TODO: get temporal embedding of source neighbors nodes
+                    batch_neighbors_src_node_embeddings = batch_src_node_embeddings.repeat_interleave(
+                        args.num_neighbors, dim=0
+                    )
+
+
+                    # TODO: get temporal embedding of neigbors nodes
+                    unique_neighbors, inverse_indices = np.unique(
+                        np.stack(
+                            [batch_neighbors_dst_node_ids, batch_neighbors_node_interact_times],
+                            axis=1,
+                        ),
+                        axis=0,
+                        return_inverse=True,
+                    )
+                    batch_neighbors_dst_node_embeddings = (
+                        model[0].compute_node_temporal_embeddings(
+                            node_ids=unique_neighbors[:, 0].astype(np.int64),
+                            node_interact_times=unique_neighbors[:, 1].astype(np.float64),
+                            num_neighbors=args.num_neighbors,
+                        )
+                    )[inverse_indices]
+
                 elif args.model_name in ["JODIE", "DyRep", "TGN"]:
                     # note that negative nodes do not change the memories while the positive nodes change the memories,
                     # we need to first compute the embeddings of negative nodes for memory-based models
@@ -436,8 +551,66 @@ def main(args):
                         edges_are_positive=True,
                         num_neighbors=args.num_neighbors,
                     )
+
+                    # TODO: get temporal embedding of source neighbors nodes
+                    batch_neighbors_src_node_embeddings = batch_src_node_embeddings.repeat_interleave(
+                        args.num_neighbors, dim=0
+                    )
+
+                    # TODO: get temporal embedding of neigbors nodes
+                    unique_neighbors, inverse_indices = np.unique(
+                        np.stack(
+                            [batch_neighbors_dst_node_ids, batch_neighbors_node_interact_times],
+                            axis=1,
+                        ),
+                        axis=0,
+                        return_inverse=True,
+                    )
+                    batch_neighbors_dst_node_embeddings = (
+                        model[0].compute_node_temporal_embeddings(
+                            node_ids=unique_neighbors[:, 0].astype(np.int64),
+                            node_interact_times=unique_neighbors[:, 1].astype(np.float64),
+                            num_neighbors=args.num_neighbors,
+                        )
+                    )[inverse_indices]
+
                 else:
                     raise ValueError(f"Wrong value for model_name {args.model_name}!")
+                
+                # TODO: train conditional diffusion model
+                n_epoch_diffusion = 3
+                diffusion_target = batch_neighbors_dst_node_embeddings.detach()
+                diffusion_condition = batch_neighbors_src_node_embeddings.detach()
+                for epoch in range(n_epoch_diffusion):
+                    d_optimizer.zero_grad()
+                    dif_loss = diffusion(
+                        diffusion_target,
+                        diffusion_condition,
+                        args.device,
+                    )
+                    dif_loss.backward()
+                    d_optimizer.step()
+                
+                # TODO: generate new embeddings
+                batch_generated_dst_node_embeddings = diffusion.sample(
+                    batch_src_node_embeddings.shape,
+                    batch_src_node_embeddings,
+                )
+
+                # TODO: compute probabilities
+                generated_dst = torch.cat(batch_generated_dst_node_embeddings, dim=0)
+                repeated_src = batch_src_node_embeddings.repeat(
+                    len(batch_generated_dst_node_embeddings), 1
+                )
+                negative_diffusion_probabilities = (
+                    model[1](
+                        input_1=repeated_src,
+                        input_2=generated_dst,
+                    )
+                    .squeeze(dim=-1)
+                    .sigmoid()
+                )
+
                 # get positive and negative probabilities, shape (batch_size, )
                 positive_probabilities = (
                     model[1](
@@ -456,13 +629,16 @@ def main(args):
                     .sigmoid()
                 )
 
+                
+
                 predicts = torch.cat(
-                    [positive_probabilities, negative_probabilities], dim=0
+                    [positive_probabilities, negative_probabilities, negative_diffusion_probabilities], dim=0
                 )
                 labels = torch.cat(
                     [
                         torch.ones_like(positive_probabilities),
                         torch.zeros_like(negative_probabilities),
+                        torch.zeros_like(negative_diffusion_probabilities),
                     ],
                     dim=0,
                 )

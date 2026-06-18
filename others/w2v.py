@@ -12,19 +12,25 @@ from utils.utils import load_pickle_file, open_config, BASE
 
 
 class MySentences(object):
-    def __init__(self, files, sampled_content_file, cfg):
+    def __init__(self, files, sampled_content_file, is_path, cfg):
         self.files = files
         self.sample = sampled_content_file
         self.nb = 0
+        self.is_path = is_path
         self.cfg = cfg
 
     def __iter__(self):
         lines = random.sample(self.files, math.ceil(self.sample * len(self.files)))
         for line in lines:
             line = line[0]
-            lst = preprocess(line, self.cfg)
-            self.nb += len(lst)
-            yield lst
+            if self.is_path:
+                lst, _ = preprocess_path(line, self.cfg)
+                self.nb += len(lst)
+                yield lst
+            else:
+                lst = preprocess_command_line(line, self.cfg)
+                self.nb += len(lst)
+                yield lst
 
     def nb_word(self):
         return self.nb
@@ -61,13 +67,10 @@ def preprocess_path(line, cfg):
     return data_lst, is_extension
 
 
-def preprocess(line, cfg):
+def preprocess_command_line(line, cfg):
     data_lst_complet = []
     m = re.compile(cfg["MODEL"]["SPLIT_PATH_COMMAND_LINE"])
     data_lst = re.findall(m, line)
-
-    if len(data_lst) == 0:
-        data_lst = [""]
 
     path_lst, _ = preprocess_path(data_lst[0].replace('"', ""), cfg)
     data_lst_complet.extend(path_lst)
@@ -75,7 +78,7 @@ def preprocess(line, cfg):
     for data in data_lst[1:]:
         data = data.replace('"', "")
         if " " in data:
-            data = preprocess(data, cfg)
+            data = preprocess_command_line(data, cfg)
             data_lst_complet.extend(data)
         elif "\\" in data or "/" in data:
             path_lst, _ = preprocess_path(data, cfg)
@@ -110,24 +113,25 @@ def train_val(data_train, cfg):
     return model
 
 
-def eval_for_encoding(model, data, cfg):
+def eval_for_encoding(model, data, is_command, cfg):
     if data == 0:
         return np.zeros(cfg["MODEL"]["LEN_ENCODE_PATH"])
     else:
-        data_lst = preprocess(data, cfg)
-        ext = False
+        if is_command:
+            data_lst = preprocess_command_line(data, cfg)
+            ext = False
+        else:
+            data_lst, ext = preprocess_path(data, cfg)
         model, sentences_emb, _, _, _, _ = eval(
-            model, [data_lst, ext, data, None, None], cfg
+            model, [data_lst, ext, data, None, None], is_command, cfg
         )
         return sentences_emb
 
 
 def eval_unknown(lst, unkown_index, h, model, last, cfg):
+    emb = []
     index = 1
     p = 0
-    new_keys = []
-    new_vecs = []
-
     while p < len(unkown_index):
         k = unkown_index[p]
         for i in range(min(k + 1, len(h)), len(h)):
@@ -141,47 +145,36 @@ def eval_unknown(lst, unkown_index, h, model, last, cfg):
         else:
             next = len(h)
 
-        emb = []
         for i in range(max(0, k - cfg["MODEL"]["WINDOW"]), k):
             try:
                 emb.append(model.wv[h[i]])
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Error {e}")
         for i in range(
             k + index, min(len(h), k + cfg["MODEL"]["WINDOW"] + index, next)
         ):
             try:
                 emb.append(model.wv[h[i]])
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Error {e}")
 
         if len(emb) > 0:
             context_emb = np.mean(np.array(emb), axis=0)
             most_similar = model.wv.similar_by_vector(context_emb, topn=2)
-            unkown_emb = np.mean(np.array([model.wv[i[0]] for i in most_similar]), axis=0)
+            unkown_emb = [model.wv[i[0]] for i in most_similar]
+            unkown_emb = np.mean(np.array(unkown_emb), axis=0)
 
             for j in range(index):
-                lst.append(eval_function_coeff_path_2combine(unkown_emb, last, h, k + j))
-                # collect vectors to add in batch instead of adding one-by-one
-                new_keys.append(h[k + j])
-                new_vecs.append(unkown_emb)
+                lst.append(
+                    eval_function_coeff_path_2combine(unkown_emb, last, h, k + j)
+                )
+                model.wv.add_vector(h[k + j], unkown_emb)
+                model.wv.fill_norms(force=True)
         else:
             lst.append(np.mean(model.wv.vectors, axis=0))
 
         p += index
         index = 1
-
-    # Add new vectors in batch to avoid expensive incremental grows
-    if len(new_keys) > 0:
-        try:
-            model.wv.add_vectors(new_keys, new_vecs)
-            model.wv.fill_norms(force=True)
-        except AttributeError:
-            # Fallback for gensim versions without add_vectors
-            for k, v in zip(new_keys, new_vecs):
-                model.wv.add_vector(k, v)
-            model.wv.fill_norms(force=True)
-
     return lst
 
 
@@ -206,7 +199,7 @@ def eval_function_coeff_path_const(enc):
     return enc
 
 
-def eval(model, data, cfg, f="const", q=0.1):
+def eval(model, data, is_command, cfg, f="const", q=0.1):
     h = data[0]
     ext = data[1]
     if ext:
@@ -244,17 +237,24 @@ def eval(model, data, cfg, f="const", q=0.1):
     return model, np.mean(np.array(lst), axis=0), data[2], data[3], data[4], h
 
 
-def main( clients, data, batch=64, sampled_content_file=0.01
+def main( clients, dataset, data, is_path=True, batch=64, sampled_content_file=0.01
 ):
     cfg = open_config(data)
+    utils_dataset = importlib.import_module(f"data.{data}_utils")
+    dataset = load_pickle_file(dataset)
     ft = []
     for c in clients:
-        preprocessing_folder = f"{BASE}/processed_data/{data}_{c}"
-        ft.extend(load_pickle_file(f"{preprocessing_folder}/path_cmd_list.pkl"))
+        time_train, _, _ = utils_dataset.get_sets(dataset[c].keys())
+        for t in time_train:
+            ft.extend(load_pickle_file(dataset[c][t]))
 
-    mysentences = MySentences(ft, sampled_content_file, cfg=cfg)
+    mysentences = MySentences(ft, sampled_content_file, is_path=is_path, cfg=cfg)
 
     model = train_val(mysentences, cfg)
 
-    model.save(BASE + "/feature_data/w2v_model.pt")
+    if is_path:
+        model.save(BASE + "/feature_data/w2v_model_path.pt")
+    else:
+        model.save(BASE + "/feature_data/w2v_model_cmd.pt")
+
     return
