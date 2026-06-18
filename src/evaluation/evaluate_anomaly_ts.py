@@ -1,5 +1,6 @@
 import logging
 import os
+import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import json
@@ -164,15 +165,41 @@ def print_results(dataset_name, model_name, metrics, conf_evaluator, mode, level
         plt.close(fig)
     
     if "calibration_bin_counts_pos" in metrics and "calibration_bin_counts_neg" in metrics and mode == "anomaly_detection":
-        fig, ax = plt.subplots(1, 2, figsize=(12, 5))
-        ax[0].bar(np.arange(50) / 50, metrics['calibration_bin_counts_neg'], width=0.02)
-        ax[0].set_xlabel('Score bin (normal samples)')
-        ax[0].set_ylabel('Count')
-        ax[0].set_title(f'Calibration bin counts (normal) — {model_name} on {dataset_name}')
-        ax[1].bar(np.arange(50) / 50, metrics['calibration_bin_counts_pos'], width=0.02, color='orange')
-        ax[1].set_xlabel('Score bin (anomalous samples)')
-        ax[1].set_ylabel('Count')
-        ax[1].set_title(f'Calibration bin counts (anomalous) — {model_name} on {dataset_name}')
+        fig, ax = plt.subplots(figsize=(10, 5))
+        n_bins = len(metrics['calibration_bin_counts_neg'])
+        x = np.arange(n_bins) / n_bins
+        width = 0.9 / n_bins
+
+        ax.bar(
+            x,
+            metrics['calibration_bin_counts_neg'],
+            width=width,
+            align='center',
+            alpha=0.45,
+            color='tab:blue',
+            label='Normal samples'
+        )
+        ax.set_xlabel('Score bin')
+        ax.set_ylabel('Count (normal samples)', color='tab:blue')
+        ax.set_title(f'Calibration bin counts — {model_name} on {dataset_name}')
+        ax.tick_params(axis='y', labelcolor='tab:blue')
+
+        ax2 = ax.twinx()
+        ax2.bar(
+            x,
+            metrics['calibration_bin_counts_pos'],
+            width=width,
+            align='center',
+            alpha=0.45,
+            color='orange',
+            label='Anomalous samples'
+        )
+        ax2.set_ylabel('Count (anomalous samples)', color='orange')
+        ax2.tick_params(axis='y', labelcolor='orange')
+
+        ax.legend(loc='upper left', bbox_to_anchor=(0.02, 0.98), framealpha=0.8)
+        ax2.legend(loc='upper right', bbox_to_anchor=(0.98, 0.98), framealpha=0.8)
+
         fig.tight_layout()
         fig.savefig(os.path.join(output_folder, f"calibration_bin_counts.png"))
         plt.close(fig)
@@ -343,7 +370,7 @@ def anomaly_detection_graph_level_metrics(predicted_links, actual_links, non_exi
 
     # compute AUC and AP
     y_true = np.array(list(timestamp_to_label.values()), dtype=np.int32)
-    y_score_avg = np.array([timestamp_to_avg_score.get(ts, 1.0) for ts in timestamp_to_label.keys()], dtype=np.float32)
+    y_score_avg = np.array([1 - timestamp_to_avg_score.get(ts, 1.0) for ts in timestamp_to_label.keys()], dtype=np.float32)
 
 
     metrics = {}
@@ -379,6 +406,58 @@ def load_results(folder, mode):
     non_exist_links = load_pickle_file(f"{folder}/non_exist_links.pkl")
 
     return predicted_links, actual_links, non_exist_links
+
+def check_weird_predictions(predicted_links, actual_links, non_exist_links, names, output_file=None):
+    # find index of existing links with lowest scores and non-existing links with highest scores
+    dataset_name, model_name = names
+    predicted_links_sorted = sorted(predicted_links, key=lambda x: x[2])
+    non_exist_links_sorted = sorted(non_exist_links, key=lambda x: x[2], reverse=True)
+    weird_existing_links = predicted_links_sorted[:100]
+    good_existing_links = predicted_links_sorted[-100:]
+    weird_non_existing_links = non_exist_links_sorted[:100]
+    good_non_existing_links = non_exist_links_sorted[-100:]
+
+    # open csv files node_features.csv and find the features of these weird predictions and save them in a text file
+    node_features_path = f"{BASE}/processed_data/{dataset_name}/node_features.csv"
+    node_features = pd.read_csv(node_features_path)
+
+    
+    # node_features.csv has 2 columns: object_type and path. The node ids correspond to the row number in the csv file. We will save the features of the weird predictions in a text file with the following format:
+
+
+    output_folder = f"experiments/{dataset_name}/{model_name.lower()}/weird_predictions"
+    create_folder(output_folder)
+    with open(os.path.join(output_folder, output_file or "weird_predictions.txt"), 'w') as f:
+        f.write("Weird Existing Links (lowest scores):\n")
+        for src, dst, score, ts in weird_existing_links:
+            src_features = node_features.iloc[src].to_dict()
+            dst_features = node_features.iloc[dst].to_dict()
+            f.write(f"  {src} -> {dst} at {ts} with score {score:.4f}\n")
+            f.write(f"    Source Features: {src_features}\n")
+            f.write(f"    Destination Features: {dst_features}\n")
+        f.write("\nGood Existing Links (highest scores):\n")
+        for src, dst, score, ts in good_existing_links:
+            src_features = node_features.iloc[src].to_dict()
+            dst_features = node_features.iloc[dst].to_dict()
+            f.write(f"  {src} -> {dst} at {ts} with score {score:.4f}\n")
+            f.write(f"    Source Features: {src_features}\n")
+            f.write(f"    Destination Features: {dst_features}\n")
+        f.write("\nWeird Non-Existing Links (highest scores):\n")
+        for src, dst, score, ts in weird_non_existing_links:
+            src_features = node_features.iloc[src].to_dict()
+            dst_features = node_features.iloc[dst].to_dict()
+            f.write(f"  {src} -> {dst} at {ts} with score {score:.4f}\n")
+            f.write(f"    Source Features: {src_features}\n")
+            f.write(f"    Destination Features: {dst_features}\n")
+        f.write("\nGood Non-Existing Links (lowest scores):\n")
+        for src, dst, score, ts in good_non_existing_links:
+            src_features = node_features.iloc[src].to_dict()
+            dst_features = node_features.iloc[dst].to_dict()
+            f.write(f"  {src} -> {dst} at {ts} with score {score:.4f}\n")
+            f.write(f"    Source Features: {src_features}\n")
+            f.write(f"    Destination Features: {dst_features}\n")
+    print(f"Weird predictions saved to {os.path.join(output_folder, output_file or 'weird_predictions.txt')}")
+
 
 def main(args):
     output_folder = f"experiments/{args.dataset_name}/{args.model_name.lower()}/ad_results"
@@ -417,4 +496,7 @@ def main(args):
     anomaly_detection_edge_level_metrics(test_predicted_links, test_actual_links, test_non_exist_links, conf_evaluator, names=(args.dataset_name, args.model_name))
 
     anomaly_detection_graph_level_metrics(test_predicted_links, test_actual_links, test_non_exist_links, None, names=(args.dataset_name, args.model_name))
+
+    check_weird_predictions(val_predicted_links, val_actual_links, val_non_exist_links, names=(args.dataset_name, args.model_name), output_file="weird_predictions_val.txt")
+    check_weird_predictions(test_predicted_links, test_actual_links, test_non_exist_links, names=(args.dataset_name, args.model_name), output_file="weird_predictions_test.txt")
 

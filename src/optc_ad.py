@@ -3,17 +3,18 @@ import argparse
 from utils.utils import BASE, open_config
 from utils.load_configs import get_link_prediction_args
 
-from preprocessing.graphs import main as building_graphs
 from preprocessing.logs_analysis import main as analyse_log
+from preprocessing.preprocessing_data import main as test_preproc
+from preprocessing.temporal_patterns import main as temporal_patterns
 from features.w2v import main as training_w2v
-from features.features_w2v import main as extract_features
-from features.features_bert import main as extract_features_bert
-from features.features_bert_llm import main as extract_features_bert_llm
-from preprocessing.optc_data_preprocessor import main as graph_to_csv_preprocessor
-from preprocessing.preprocess_data import main as ml_data_preprocessor
+from features.extract_features import main as extract_features
+from features.train_bert128 import main as train_bert128
 from training.train_link_prediction import main as training_link_prediction
+from training.train_link_prediction_ano_insertion import main as training_link_prediction_check
 from evaluation.evaluate_link_prediction import main as validate_link_prediction
+from evaluation.evaluate_link_prediction_ano_insertion import main as validate_link_prediction_check
 from evaluation.evaluate_anomaly_ts import main as testing_anomaly_detection
+from preprocessing.two_hop_non_neighbors import main as compute_2hop_non_neighbors
 
 
 if __name__ == "__main__":
@@ -96,53 +97,42 @@ if __name__ == "__main__":
 
         task = args.task
         if task == "log_analysis":
-            analyse_log(clients, logs, dataset)
+            analyse_log(clients, logs, dataset, start_val, start_test)
 
-        if task == "graph":  # construction of all graphs
-            building_graphs(clients, duration, logs, dataset)
-
-        elif task == "w2v":  # extraction of features
-            training_w2v(clients, cmds, data=dataset, is_path=False)
-            training_w2v(clients, paths, data=dataset)
-
-        elif task == "feature_w2v":  # extraction of features using Word2Vec / existing path model
-            extract_features(clients, graphs, model_w2v_path, dataset)
-
-        elif task == "feature_bert":
-            extract_features_bert(clients, graphs, model_w2v_path, dataset)
-
-        elif task == "feature_bert_llm":
-            extract_features_bert_llm(clients, graphs, model_w2v_path, dataset)
+        elif task == "temporal_pattern":
+            temporal_patterns(clients, start_val, start_test)
 
         elif task == "preprocessing":
-            for client in clients:
-                dataset_name = f"optc_{client}"
-                input_path = f"{BASE}/graph_data/{dataset_name}/"
-                output_path = f"{BASE}/DG_data/{dataset_name}/{dataset_name}.csv"
-                graph_to_csv_preprocessor(
-                    client,
-                    input_path,
-                    output_path,
-                    label_path,
-                    start_val,
-                    start_test,
-                    args.with_features,
-                    cfg_dataset["MODEL"]["LEN_ENCODE_PATH"],
-                    args.aggregation
-                )
-                ml_data_preprocessor(dataset_name, bipartite=False, node_feat_dim=cfg_dataset["MODEL"]["LEN_ENCODE_PATH"])
-
-        elif task == "preprocessing_2":
-            for client in clients:
-                dataset_name = f"optc_{client}"
-                ml_data_preprocessor(dataset_name, bipartite=False, node_feat_dim=cfg_dataset["MODEL"]["LEN_ENCODE_PATH"])
+            test_preproc(logs, dataset, clients)
         
+        elif task == "two_hop_non_neighbors":
+            compute_2hop_non_neighbors(dataset, clients)
+        
+        elif task == "train_w2v":
+            training_w2v(clients, data=dataset)
+        
+        elif task == "train_bert128":
+            train_bert128(clients, data=dataset)
+            
+        elif task == "feature_w2v":  
+            extract_features(dataset, clients, model_type="w2v")
+
+        elif task == "feature_bert":  
+            extract_features(dataset, clients, model_type="bert")
+
 
         elif task == "train_link_prediction":
             train_link_prediction_args = get_link_prediction_args(is_evaluation=False)
             for client in clients:
                 train_link_prediction_args.dataset_name = f"optc_{client}"
                 training_link_prediction(train_link_prediction_args)
+        
+        elif task == "train_link_prediction_ano_insertion":
+            train_link_prediction_args = get_link_prediction_args(is_evaluation=False)
+            for client in clients:
+                train_link_prediction_args.dataset_name = f"optc_{client}"
+                training_link_prediction_check(train_link_prediction_args)
+
 
         elif task == "validate_link_prediction":
             validation_link_prediction_args = get_link_prediction_args(
@@ -152,68 +142,22 @@ if __name__ == "__main__":
                 validation_link_prediction_args.dataset_name = f"optc_{client}"
                 validate_link_prediction(validation_link_prediction_args)
 
+        elif task == "validate_link_prediction_ano_insertion":
+            validation_link_prediction_args = get_link_prediction_args(
+                is_evaluation=True
+            )
+            for client in clients:
+                validation_link_prediction_args.dataset_name = f"optc_{client}"
+                validate_link_prediction_check(validation_link_prediction_args)
+
         elif task == "test_anomaly_detection":
             test_anomaly_detection_args = get_link_prediction_args(is_evaluation=True)
             for client in clients:
                 test_anomaly_detection_args.dataset_name = f"optc_{client}"
                 testing_anomaly_detection(test_anomaly_detection_args)
 
-        elif task == "ML":
-            ML_args = get_link_prediction_args(is_evaluation=False)
-            for client in clients:
-                ML_args.dataset_name = f"optc_{client}"
-                training_link_prediction(ML_args)
-                validate_link_prediction(ML_args)
-                testing_anomaly_detection(ML_args)
 
-        elif task == "all_preprocessing":
-            building_graphs( clients, duration, logs, dataset)
-            training_w2v(clients, cmds, data=dataset, is_path=False)
-            training_w2v(clients, paths, data=dataset)
-            extract_features(clients, graphs, model_w2v_path, dataset)
-            for client in clients:
-                dataset_name = f"optc_{client}"
-                input_path = f"{BASE}/graph_data/{dataset_name}/"
-                output_path = f"{BASE}/DG_data/{dataset_name}/{dataset_name}.csv"
-                graph_to_csv_preprocessor(
-                    client,
-                    input_path,
-                    output_path,
-                    label_path,
-                    start_val,
-                    start_test,
-                    args.with_features,
-                    cfg_dataset["MODEL"]["LEN_ENCODE_PATH"],
-                    args.aggregation
-                )
-                ml_data_preprocessor(dataset_name, bipartite=False, node_feat_dim=cfg_dataset["MODEL"]["LEN_ENCODE_PATH"])
 
-        elif task == "complete":
-            building_graphs( clients, duration, logs, dataset)
-            training_w2v(clients, cmds, data=dataset, is_path=False)
-            training_w2v(clients, paths, data=dataset)
-            extract_features(clients, graphs, model_w2v_path, dataset)
-            ML_args = get_link_prediction_args(is_evaluation=False)
-            for client in clients:
-                dataset_name = f"optc_{client}"
-                input_path = f"{BASE}/graph_data/{dataset_name}/"
-                output_path = f"{BASE}/DG_data/{dataset_name}/{dataset_name}.csv"
-                graph_to_csv_preprocessor(
-                    client,
-                    input_path,
-                    output_path,
-                    label_path,
-                    start_val,
-                    start_test,
-                    args.with_features,
-                    cfg_dataset["MODEL"]["LEN_ENCODE_PATH"],
-                    args.aggregation
-                )
-                ml_data_preprocessor(dataset_name, bipartite=False, node_feat_dim=cfg_dataset["MODEL"]["LEN_ENCODE_PATH"])
-                ML_args.dataset_name = f"optc_{client}"
-                training_link_prediction(ML_args)
-                validate_link_prediction(ML_args)
-                testing_anomaly_detection(ML_args)
 
     except Exception as e:
         print(f"Error {e}")

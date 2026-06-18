@@ -2,7 +2,7 @@ import networkx as nx
 import numpy as np
 import os
 
-from features.w2v import eval_for_encoding
+from others.w2v import eval_for_encoding
 
 from utils.utils import encoding_parent_son, encoding_sid, get_duration, open_config
 

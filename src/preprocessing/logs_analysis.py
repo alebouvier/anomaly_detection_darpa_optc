@@ -1,12 +1,17 @@
 import gzip
 import json
 import importlib
+import re
 import traceback
 from collections import Counter, defaultdict
 
 import networkx as nx
 import numpy as np
+import pandas as pd
+import pandasql as ps
 from tqdm import tqdm
+import datetime as dt
+
 
 from utils.utils import period, round_duration, save_pkl, open_config, BASE
 
@@ -98,7 +103,7 @@ def iter_logs(files):
         yield from extract_data(file)
 
 
-def main(clients, logs, dataset):
+def main(clients, logs, dataset, start_val, start_test):
     print("Start task graph")
     utils_dataset = importlib.import_module(f"data.{dataset}_utils")
     for c in clients:
@@ -134,8 +139,28 @@ def main(clients, logs, dataset):
         process_adj,
     )
 
+    client_anomalies = repartition_anomaly_by_client(anomaly_data)
+    for client, anomalies in client_anomalies.items():
+        print(f"\n=== Anomalies for client {client} ===")
+        day_counts = Counter(day for day, _ in anomalies)
+        for day, count in day_counts.items():
+            print(f"{day}: {count} anomalies")
+
 
     return
+
+
+def repartition_anomaly_by_client(anomaly_data):
+    # find number of anomalies by client and by day
+    client_anomalies = defaultdict(list)
+    for log in iter_logs(anomaly_data):
+        client = log["hostname"].lower()
+        timestamp_str = log["timestamp"]
+        day = timestamp_str[:10]
+        client_anomalies[client].append((day, log))
+        if log["object"] == "SHELL":
+            print(f"Anomaly log with SHELL object: {log}")
+    return client_anomalies
 
 
 def count_process_paths(process_adj):
@@ -211,3 +236,7 @@ def print_stats(
 
     if object_type_conflicts:
         print(f"\n {len(object_type_conflicts)} Object ID type conflicts detected:")
+
+
+
+

@@ -19,7 +19,6 @@ from models.GraphMixer import GraphMixer
 from models.DyGFormer import DyGFormer
 from models.modules import MergeLayer
 from utils.utils import (
-    load_pickle_file,
     set_random_seed,
     convert_to_gpu,
     get_parameter_sizes,
@@ -59,12 +58,6 @@ def main(args):
         anomaly_injection=args.anomaly_injection,
         sanity_check=True
     )
-
-    if args.negative_sample_strategy == "2hop_neighbor":
-        # read csv
-        neighbors_2hop = pd.read_csv(f"{BASE}/processed_data/{args.dataset_name}/two_hop_non_neighbors.csv")
-    else:
-        neighbors_2hop = None
     
 
     # initialize training neighbor sampler to retrieve temporal graph
@@ -91,18 +84,16 @@ def main(args):
         dst_node_ids=train_data.dst_node_ids,
         interact_times=train_data.node_interact_times,
         negative_sample_strategy=args.negative_sample_strategy,
-        neighbors_2hop=neighbors_2hop,
         seed=0 if args.negative_sample_strategy != "random" else None,
     )
     val_neg_edge_sampler = NegativeEdgeSampler(
-        src_node_ids=full_data.src_node_ids, dst_node_ids=full_data.dst_node_ids, interact_times=full_data.node_interact_times, negative_sample_strategy=args.negative_sample_strategy, neighbors_2hop=neighbors_2hop, seed=1
+        src_node_ids=full_data.src_node_ids, dst_node_ids=full_data.dst_node_ids, interact_times=full_data.node_interact_times, negative_sample_strategy=args.negative_sample_strategy, seed=1
     )
     if args.inductive:
         new_node_val_neg_edge_sampler = NegativeEdgeSampler(
             src_node_ids=new_node_val_data.src_node_ids,
             dst_node_ids=new_node_val_data.dst_node_ids,
             negative_sample_strategy=args.negative_sample_strategy,
-            neighbors_2hop=neighbors_2hop,
             seed=1,
         )
     # test_neg_edge_sampler = NegativeEdgeSampler(src_node_ids=full_data.src_node_ids, dst_node_ids=full_data.dst_node_ids, seed=2)
@@ -111,7 +102,7 @@ def main(args):
 
     # get data loaders
     train_idx_data_loader = get_idx_data_loader(
-        indices_list=list(range(len(train_data.src_node_ids))),
+        indices_list=list(range(len(train_data.edge_ids))),
         batch_size=args.batch_size,
         shuffle=False,
     )
@@ -143,8 +134,8 @@ def main(args):
         )
         create_folder(args.experiment_folder)
 
-        batch_preferred_ratios = []
-        global_preferred_edges = 0
+        batch_historical_ratios = []
+        global_historical_edges = 0
         global_random_edges = 0
 
         # set up logger
@@ -304,40 +295,87 @@ def main(args):
             train_idx_data_loader_tqdm = tqdm(
                 train_idx_data_loader, ncols=120, mininterval=2
             )
+            nb_normal_edges_sampled = 0
+            nb_anomalous_edges_sampled = 0
+            nb_random_edges_sampled = 0
             for batch_idx, train_data_indices in enumerate(train_idx_data_loader_tqdm):
                 train_data_indices = train_data_indices.numpy()
+                # keep train_data_indices for which the label is zero
+                normal_train_data_indices = train_data_indices[train_data.labels[train_data_indices] == 0]
+                ano_train_data_indices = train_data_indices[train_data.labels[train_data_indices] == 1]
+
+                if len(normal_train_data_indices) == 0:
+                    continue
+
+                # sample 2% of training indices
+                # if len(normal_train_data_indices) > 0:
+                #     sample_size = max(1, int(0.05 * len(normal_train_data_indices)))
+                #     normal_train_data_indices = np.random.choice(normal_train_data_indices, size=sample_size, replace=False)
+                
                 (
                     batch_src_node_ids,
                     batch_dst_node_ids,
                     batch_node_interact_times,
                     batch_edge_ids,
                 ) = (
-                    train_data.src_node_ids[train_data_indices],
-                    train_data.dst_node_ids[train_data_indices],
-                    train_data.node_interact_times[train_data_indices],
-                    train_data.edge_ids[train_data_indices],
+                    train_data.src_node_ids[normal_train_data_indices],
+                    train_data.dst_node_ids[normal_train_data_indices],
+                    train_data.node_interact_times[normal_train_data_indices],
+                    train_data.edge_ids[normal_train_data_indices],
                 )
 
-                
-                _, batch_neg_dst_node_ids, num_preferred_sample_edges, num_random_sample_edges = (
-                    train_neg_edge_sampler.sample(
-                        size=len(batch_src_node_ids),
-                        batch_src_node_ids=batch_src_node_ids,
-                        batch_dst_node_ids=batch_dst_node_ids,
-                        current_batch_start_time=float(np.min(batch_node_interact_times)),
-                        current_batch_end_time=float(np.max(batch_node_interact_times)),
-                        return_sampling_counts=True,
+                (
+                    batch_ano_src_node_ids,
+                    batch_ano_dst_node_ids,
+                    batch_ano_node_interact_times,
+                    batch_ano_edge_ids,
+                ) = (
+                    train_data.src_node_ids[ano_train_data_indices],
+                    train_data.dst_node_ids[ano_train_data_indices],
+                    train_data.node_interact_times[ano_train_data_indices],
+                    train_data.edge_ids[ano_train_data_indices],
+                )
+
+                neg_edge_sample_size = max(0, len(batch_src_node_ids) - len(batch_ano_src_node_ids))
+
+                if neg_edge_sample_size > 0:
+                    _, batch_neg_dst_node_ids, num_preferred_sample_edges, num_random_sample_edges = (
+                        train_neg_edge_sampler.sample(
+                            size=neg_edge_sample_size,
+                            batch_src_node_ids=batch_src_node_ids,
+                            batch_dst_node_ids=batch_dst_node_ids,
+                            current_batch_start_time=float(np.min(batch_node_interact_times)),
+                            current_batch_end_time=float(np.max(batch_node_interact_times)),
+                            return_sampling_counts=True,
+                        )
                     )
-                )
-                batch_neg_src_node_ids = batch_src_node_ids
+                    batch_neg_src_node_ids = batch_src_node_ids[:neg_edge_sample_size]
+                else:
+                    batch_neg_src_node_ids = np.array([], dtype=np.int64)
+                    batch_neg_dst_node_ids = np.array([], dtype=np.int64)
+                    num_preferred_sample_edges = 0
+                    num_random_sample_edges = 0
 
-                if args.negative_sample_strategy != "random":
-                    global_preferred_edges += num_preferred_sample_edges
-                    batch_preferred_ratios.append(
+                nb_normal_edges_sampled += len(batch_src_node_ids)
+                nb_anomalous_edges_sampled += len(batch_ano_src_node_ids)
+                nb_random_edges_sampled += num_random_sample_edges
+
+                # extend the negative samples with anomalous edges (the node_ids list are ndarrays)
+                if len(batch_ano_src_node_ids) > 0:
+                    batch_neg_src_node_ids = np.concatenate([batch_neg_src_node_ids, batch_ano_src_node_ids])
+                    batch_neg_dst_node_ids = np.concatenate([batch_neg_dst_node_ids, batch_ano_dst_node_ids])
+                    batch_neg_node_interact_times = np.concatenate([batch_node_interact_times[:neg_edge_sample_size], batch_ano_node_interact_times])
+                else:
+                    batch_neg_node_interact_times = batch_node_interact_times
+
+
+                if args.negative_sample_strategy == "historical":
+                    global_historical_edges += num_preferred_sample_edges
+                    batch_historical_ratios.append(
                         num_preferred_sample_edges / len(batch_src_node_ids)
                     )
                 else:
-                    batch_preferred_ratios.append(0.0)
+                    batch_historical_ratios.append(0.0)
                 global_random_edges += num_random_sample_edges
 
                 # we need to compute for positive and negative edges respectively, because the new sampling strategy (for evaluation) allows the negative source nodes to be
@@ -360,7 +398,7 @@ def main(args):
                         model[0].compute_src_dst_node_temporal_embeddings(
                             src_node_ids=batch_neg_src_node_ids,
                             dst_node_ids=batch_neg_dst_node_ids,
-                            node_interact_times=batch_node_interact_times,
+                            node_interact_times=batch_neg_node_interact_times,
                             num_neighbors=args.num_neighbors,
                         )
                     )
@@ -383,7 +421,7 @@ def main(args):
                         model[0].compute_src_dst_node_temporal_embeddings(
                             src_node_ids=batch_neg_src_node_ids,
                             dst_node_ids=batch_neg_dst_node_ids,
-                            node_interact_times=batch_node_interact_times,
+                            node_interact_times=batch_neg_node_interact_times,
                             num_neighbors=args.num_neighbors,
                             time_gap=args.time_gap,
                         )
@@ -405,7 +443,7 @@ def main(args):
                         model[0].compute_src_dst_node_temporal_embeddings(
                             src_node_ids=batch_neg_src_node_ids,
                             dst_node_ids=batch_neg_dst_node_ids,
-                            node_interact_times=batch_node_interact_times,
+                            node_interact_times=batch_neg_node_interact_times,
                         )
                     )
                 elif args.model_name in ["JODIE", "DyRep", "TGN"]:
@@ -417,7 +455,7 @@ def main(args):
                         model[0].compute_src_dst_node_temporal_embeddings(
                             src_node_ids=batch_neg_src_node_ids,
                             dst_node_ids=batch_neg_dst_node_ids,
-                            node_interact_times=batch_node_interact_times,
+                            node_interact_times=batch_neg_node_interact_times,
                             edge_ids=None,
                             edges_are_positive=False,
                             num_neighbors=args.num_neighbors,
@@ -491,6 +529,8 @@ def main(args):
                     # detach the memories and raw messages of nodes in the memory bank after each batch, so we don't back propagate to the start of time
                     model[0].memory_bank.detach_memory_bank()
 
+            print(f"nb_normal_edges_sampled: {nb_normal_edges_sampled}, nb_anomalous_edges_sampled: {nb_anomalous_edges_sampled}, nb_random_edges_sampled: {nb_random_edges_sampled}")  
+
             if args.model_name in ["JODIE", "DyRep", "TGN"]:
                 # backup memory bank after training so it can be used for new validation nodes
                 train_backup_memory_bank = model[0].memory_bank.backup_memory_bank()
@@ -516,13 +556,13 @@ def main(args):
             epoch_val_loss = np.mean(val_losses)
             val_loss_history.append(epoch_val_loss)
 
-            total_sampled_edges = global_preferred_edges + global_random_edges
-            average_batch_preferred_proportion = np.mean(batch_preferred_ratios) if len(batch_preferred_ratios) > 0 else 0.0
+            total_sampled_edges = global_historical_edges + global_random_edges
+            average_batch_historical_proportion = np.mean(batch_historical_ratios) if len(batch_historical_ratios) > 0 else 0.0
             logger.info(
-                f"Training negative sampling proportions: global preferred edges = {global_preferred_edges}, "
+                f"Training negative sampling proportions: global historical edges = {global_historical_edges}, "
                 f"global random edges = {global_random_edges}, "
-                f"global preferred proportion = {(global_preferred_edges / total_sampled_edges if total_sampled_edges > 0 else 0.0):.4f}, "
-                f"average batch preferred proportion = {average_batch_preferred_proportion:.4f}"
+                f"global historical proportion = {(global_historical_edges / total_sampled_edges if total_sampled_edges > 0 else 0.0):.4f}, "
+                f"average batch historical proportion = {average_batch_historical_proportion:.4f}"
             )
 
             if args.model_name in ["JODIE", "DyRep", "TGN"]:

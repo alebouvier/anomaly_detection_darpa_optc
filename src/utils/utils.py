@@ -990,9 +990,7 @@ class NeighborSampler:
                     nodes_edge_ids[idx, num_neighbors - len(node_edge_ids) :] = (
                         node_edge_ids
                     )
-                    nodes_neighbor_times[
-                        idx, num_neighbors - len(node_neighbor_times) :
-                    ] = node_neighbor_times
+                    nodes_neighbor_times[idx, num_neighbors - len(node_neighbor_times) :] = node_neighbor_times
                 else:
                     raise ValueError(
                         f"Not implemented error for sample_neighbor_strategy {self.sample_neighbor_strategy}!"
@@ -1136,6 +1134,7 @@ class NegativeEdgeSampler(object):
         interact_times: np.ndarray = None,
         last_observed_time: float = None,
         negative_sample_strategy: str = "random",
+        neighbors_2hop: pd.DataFrame = None,
         seed: int = None,
     ):
         """
@@ -1157,14 +1156,7 @@ class NegativeEdgeSampler(object):
         self.unique_interact_times = np.unique(interact_times)
         self.earliest_time = min(self.unique_interact_times)
         self.last_observed_time = last_observed_time
-
-        if self.negative_sample_strategy != "random":
-            # all the possible edges that connect source nodes in self.unique_src_node_ids with destination nodes in self.unique_dst_node_ids
-            self.possible_edges = set(
-                (src_node_id, dst_node_id)
-                for src_node_id in self.unique_src_node_ids
-                for dst_node_id in self.unique_dst_node_ids
-            )
+        self.neighbors_2hop = neighbors_2hop
 
         if self.negative_sample_strategy == "inductive":
             # set of observed edges
@@ -1196,6 +1188,19 @@ class NegativeEdgeSampler(object):
             )
         )
 
+    def _encode_edges(self, src_node_ids: np.ndarray, dst_node_ids: np.ndarray):
+        src = src_node_ids.astype(np.int64)
+        dst = dst_node_ids.astype(np.int64)
+        if not hasattr(self, "_edge_code_multiplier"):
+            self._edge_code_multiplier = int(self.unique_dst_node_ids.max()) + 1
+        return src * np.int64(self._edge_code_multiplier) + dst
+
+    def _decode_edge_codes(self, edge_codes: np.ndarray):
+        edge_codes = edge_codes.astype(np.int64)
+        src_node_ids = edge_codes // np.int64(self._edge_code_multiplier)
+        dst_node_ids = edge_codes % np.int64(self._edge_code_multiplier)
+        return src_node_ids.astype(np.longlong), dst_node_ids.astype(np.longlong)
+
     def sample(
         self,
         size: int,
@@ -1203,6 +1208,7 @@ class NegativeEdgeSampler(object):
         batch_dst_node_ids: np.ndarray = None,
         current_batch_start_time: float = 0.0,
         current_batch_end_time: float = 0.0,
+        return_sampling_counts: bool = False,
     ):
         """
         sample negative edges, support random, historical and inductive sampling strategy
@@ -1211,26 +1217,72 @@ class NegativeEdgeSampler(object):
         :param batch_dst_node_ids: ndarray, shape (batch_size, ), destination node ids in the current batch
         :param current_batch_start_time: float, start time in the current batch
         :param current_batch_end_time: float, end time in the current batch
-        :return:
+        :param return_sampling_counts: bool, whether to return sampled edge counts for preferred and random edges
+        :return: tuple of (negative_src_node_ids, negative_dst_node_ids) or
+            (negative_src_node_ids, negative_dst_node_ids, num_preferred_sample_edges, num_random_sample_edges)
         """
         if self.negative_sample_strategy == "random":
             negative_src_node_ids, negative_dst_node_ids = self.random_sample(size=size)
+            if return_sampling_counts:
+                return negative_src_node_ids, negative_dst_node_ids, 0, size
         elif self.negative_sample_strategy == "historical":
-            negative_src_node_ids, negative_dst_node_ids = self.historical_sample(
+            negative_src_node_ids, negative_dst_node_ids, num_preferred_sample_edges, num_random_sample_edges = self.historical_sample(
                 size=size,
                 batch_src_node_ids=batch_src_node_ids,
                 batch_dst_node_ids=batch_dst_node_ids,
                 current_batch_start_time=current_batch_start_time,
                 current_batch_end_time=current_batch_end_time,
             )
+            if return_sampling_counts:
+                return (
+                    negative_src_node_ids,
+                    negative_dst_node_ids,
+                    num_preferred_sample_edges,
+                    num_random_sample_edges,
+                )
         elif self.negative_sample_strategy == "inductive":
-            negative_src_node_ids, negative_dst_node_ids = self.inductive_sample(
+            negative_src_node_ids, negative_dst_node_ids, num_preferred_sample_edges, num_random_sample_edges = self.inductive_sample(
                 size=size,
                 batch_src_node_ids=batch_src_node_ids,
                 batch_dst_node_ids=batch_dst_node_ids,
                 current_batch_start_time=current_batch_start_time,
                 current_batch_end_time=current_batch_end_time,
             )
+            if return_sampling_counts:
+                return (
+                    negative_src_node_ids,
+                    negative_dst_node_ids,
+                    num_preferred_sample_edges,
+                    num_random_sample_edges,
+                )
+        elif self.negative_sample_strategy == "2hop_neighbor":
+            negative_src_node_ids, negative_dst_node_ids, num_preferred_sample_edges, num_random_sample_edges = self.neighbor_sample(
+                size=size,
+                batch_src_node_ids=batch_src_node_ids,
+                batch_dst_node_ids=batch_dst_node_ids,
+                current_batch_start_time=current_batch_start_time,
+                current_batch_end_time=current_batch_end_time,
+            )
+            if return_sampling_counts:
+                return (
+                    negative_src_node_ids,
+                    negative_dst_node_ids,
+                    num_preferred_sample_edges,
+                    num_random_sample_edges,
+                )
+        elif self.negative_sample_strategy == "popular":
+            negative_src_node_ids, negative_dst_node_ids, num_preferred_sample_edges, num_random_sample_edges = self.popular_sample(
+                size=size,
+                current_batch_start_time=current_batch_start_time,
+                current_batch_end_time=current_batch_end_time,
+            )
+            if return_sampling_counts:
+                return (
+                    negative_src_node_ids,
+                    negative_dst_node_ids,
+                    num_preferred_sample_edges,
+                    num_random_sample_edges,
+                )
         else:
             raise ValueError(
                 f"Not implemented error for negative_sample_strategy {self.negative_sample_strategy}!"
@@ -1279,25 +1331,53 @@ class NegativeEdgeSampler(object):
                 batch_src_node_ids, batch_dst_node_ids
             )
         )
-        possible_random_edges = list(self.possible_edges - batch_edges)
-        assert len(possible_random_edges) > 0
-        # if replace is True, then a value in the list can be selected multiple times, otherwise, a value can be selected only once at most
-        random_edge_indices = self.random_state.choice(
-            len(possible_random_edges),
-            size=size,
-            replace=len(possible_random_edges) < size,
+
+        total_possible_edges = (
+            len(self.unique_src_node_ids) * len(self.unique_dst_node_ids)
+            - len(batch_edges)
         )
-        return np.array(
-            [
-                possible_random_edges[random_edge_idx][0]
-                for random_edge_idx in random_edge_indices
-            ]
-        ), np.array(
-            [
-                possible_random_edges[random_edge_idx][1]
-                for random_edge_idx in random_edge_indices
-            ]
-        )
+        assert total_possible_edges > 0
+        allow_duplicate = total_possible_edges < size
+
+        negative_edges = []
+        negative_edges_set = set() if not allow_duplicate else None
+        candidate_batch_size = max(size * 2, 1000)
+
+        while len(negative_edges) < size:
+            if self.seed is None:
+                src_indices = np.random.randint(
+                    0, len(self.unique_src_node_ids), candidate_batch_size
+                )
+                dst_indices = np.random.randint(
+                    0, len(self.unique_dst_node_ids), candidate_batch_size
+                )
+            else:
+                src_indices = self.random_state.randint(
+                    0, len(self.unique_src_node_ids), candidate_batch_size
+                )
+                dst_indices = self.random_state.randint(
+                    0, len(self.unique_dst_node_ids), candidate_batch_size
+                )
+
+            for src_idx, dst_idx in zip(src_indices, dst_indices):
+                edge = (
+                    self.unique_src_node_ids[src_idx],
+                    self.unique_dst_node_ids[dst_idx],
+                )
+                if edge in batch_edges:
+                    continue
+                if not allow_duplicate and edge in negative_edges_set:
+                    continue
+
+                negative_edges.append(edge)
+                if negative_edges_set is not None:
+                    negative_edges_set.add(edge)
+                if len(negative_edges) == size:
+                    break
+
+        sampled_src_node_ids = np.array([edge[0] for edge in negative_edges])
+        sampled_dst_node_ids = np.array([edge[1] for edge in negative_edges])
+        return sampled_src_node_ids, sampled_dst_node_ids
 
     def historical_sample(
         self,
@@ -1315,29 +1395,31 @@ class NegativeEdgeSampler(object):
         :param batch_dst_node_ids: ndarray, shape (batch_size, ), destination node ids in the current batch
         :param current_batch_start_time: float, start time in the current batch
         :param current_batch_end_time: float, end time in the current batch
-        :return:
+        :return: tuple of (negative_src_node_ids, negative_dst_node_ids, num_historical_sample_edges, num_random_sample_edges)
         """
         assert self.seed is not None
-        # get historical edges up to current_batch_start_time
-        historical_edges = self.get_unique_edges_between_start_end_time(
-            start_time=self.earliest_time, end_time=current_batch_start_time
+        historical_mask = self.interact_times <= current_batch_start_time
+        historical_codes = np.unique(
+            self._encode_edges(
+                self.src_node_ids[historical_mask],
+                self.dst_node_ids[historical_mask],
+            )
         )
-        # get edges in the current batch
-        current_batch_edges = self.get_unique_edges_between_start_end_time(
-            start_time=current_batch_start_time, end_time=current_batch_end_time
+        current_batch_codes = np.unique(
+            self._encode_edges(batch_src_node_ids, batch_dst_node_ids)
         )
-        # get source and destination node ids of unique historical edges
-        unique_historical_edges = historical_edges - current_batch_edges
-        unique_historical_edges_src_node_ids = np.array(
-            [edge[0] for edge in unique_historical_edges]
+        unique_historical_codes = np.setdiff1d(
+            historical_codes, current_batch_codes, assume_unique=True
         )
-        unique_historical_edges_dst_node_ids = np.array(
-            [edge[1] for edge in unique_historical_edges]
+        unique_historical_edges_src_node_ids, unique_historical_edges_dst_node_ids = (
+            self._decode_edge_codes(unique_historical_codes)
         )
 
         # if sample size is larger than number of unique historical edges, then fill in remaining edges with randomly sampled edges with collision check
-        if size > len(unique_historical_edges):
-            num_random_sample_edges = size - len(unique_historical_edges)
+        num_historical_sample_edges = min(size, len(unique_historical_codes))
+        num_random_sample_edges = size - num_historical_sample_edges
+
+        if num_random_sample_edges > 0:
             random_sample_src_node_ids, random_sample_dst_node_ids = (
                 self.random_sample_with_collision_check(
                     size=num_random_sample_edges,
@@ -1353,9 +1435,8 @@ class NegativeEdgeSampler(object):
                 [random_sample_dst_node_ids, unique_historical_edges_dst_node_ids]
             )
         else:
-            num_random_sample_edges = 0
             historical_sample_edge_node_indices = self.random_state.choice(
-                len(unique_historical_edges), size=size, replace=False
+                len(unique_historical_edges_src_node_ids), size=size, replace=False
             )
             negative_src_node_ids = unique_historical_edges_src_node_ids[
                 historical_sample_edge_node_indices
@@ -1366,8 +1447,11 @@ class NegativeEdgeSampler(object):
 
         # Note that if one of the input of np.concatenate is empty, the output will be composed of floats.
         # Hence, convert the type to long to guarantee valid index
-        return negative_src_node_ids.astype(np.longlong), negative_dst_node_ids.astype(
-            np.longlong
+        return (
+            negative_src_node_ids.astype(np.longlong),
+            negative_dst_node_ids.astype(np.longlong),
+            num_historical_sample_edges,
+            num_random_sample_edges,
         )
 
     def inductive_sample(
@@ -1389,28 +1473,34 @@ class NegativeEdgeSampler(object):
         :return:
         """
         assert self.seed is not None
-        # get historical edges up to current_batch_start_time
-        historical_edges = self.get_unique_edges_between_start_end_time(
-            start_time=self.earliest_time, end_time=current_batch_start_time
+        historical_mask = self.interact_times <= current_batch_start_time
+        historical_codes = np.unique(
+            self._encode_edges(
+                self.src_node_ids[historical_mask],
+                self.dst_node_ids[historical_mask],
+            )
         )
-        # get edges in the current batch
-        current_batch_edges = self.get_unique_edges_between_start_end_time(
-            start_time=current_batch_start_time, end_time=current_batch_end_time
+        current_batch_codes = np.unique(
+            self._encode_edges(batch_src_node_ids, batch_dst_node_ids)
         )
-        # get source and destination node ids of historical edges but 1) not in self.observed_edges; 2) not in the current batch
-        unique_inductive_edges = (
-            historical_edges - self.observed_edges - current_batch_edges
+        observed_src = np.array([edge[0] for edge in self.observed_edges], dtype=np.int64)
+        observed_dst = np.array([edge[1] for edge in self.observed_edges], dtype=np.int64)
+        observed_codes = np.unique(self._encode_edges(observed_src, observed_dst))
+
+        unique_inductive_codes = np.setdiff1d(
+            historical_codes,
+            np.union1d(observed_codes, current_batch_codes),
+            assume_unique=True,
         )
-        unique_inductive_edges_src_node_ids = np.array(
-            [edge[0] for edge in unique_inductive_edges]
-        )
-        unique_inductive_edges_dst_node_ids = np.array(
-            [edge[1] for edge in unique_inductive_edges]
+        unique_inductive_edges_src_node_ids, unique_inductive_edges_dst_node_ids = (
+            self._decode_edge_codes(unique_inductive_codes)
         )
 
         # if sample size is larger than number of unique inductive edges, then fill in remaining edges with randomly sampled edges
-        if size > len(unique_inductive_edges):
-            num_random_sample_edges = size - len(unique_inductive_edges)
+        num_inductive_sample_edges = min(size, len(unique_inductive_codes))
+        num_random_sample_edges = size - num_inductive_sample_edges
+
+        if num_random_sample_edges > 0:
             random_sample_src_node_ids, random_sample_dst_node_ids = (
                 self.random_sample_with_collision_check(
                     size=num_random_sample_edges,
@@ -1427,7 +1517,7 @@ class NegativeEdgeSampler(object):
             )
         else:
             inductive_sample_edge_node_indices = self.random_state.choice(
-                len(unique_inductive_edges), size=size, replace=False
+                len(unique_inductive_edges_src_node_ids), size=size, replace=False
             )
             negative_src_node_ids = unique_inductive_edges_src_node_ids[
                 inductive_sample_edge_node_indices
@@ -1438,9 +1528,125 @@ class NegativeEdgeSampler(object):
 
         # Note that if one of the input of np.concatenate is empty, the output will be composed of floats.
         # Hence, convert the type to long to guarantee valid index
-        return negative_src_node_ids.astype(np.longlong), negative_dst_node_ids.astype(
-            np.longlong
+        return (
+            negative_src_node_ids.astype(np.longlong),
+            negative_dst_node_ids.astype(np.longlong),
+            num_inductive_sample_edges,
+            num_random_sample_edges,
         )
+    
+    def popular_sample(
+        self,
+        size: int,
+        current_batch_start_time: float,
+        current_batch_end_time: float,
+        ):
+        """
+        popular sampling strategy, which samples negative edges based on node popularity (degree), where the popularity is calculated based on historical interactions before current batch
+        :param size: int, number of sampled negative edges
+        :param batch_src_node_ids: ndarray, shape (batch_size, ), source node ids in the current batch
+        :param batch_dst_node_ids: ndarray, shape (batch_size, ), destination node ids in the current batch
+        :param current_batch_start_time: float, start time in the current batch
+        :param current_batch_end_time: float, end time in the current batch
+        :return:
+        """        
+        assert self.seed is not None
+        historical_mask = self.interact_times <= current_batch_start_time
+        historical_src_node_ids = self.src_node_ids[historical_mask]
+        historical_dst_node_ids = self.dst_node_ids[historical_mask]
+        # sample src and dst nodes based on their popularity (degree) in historical interactions
+        unique_src_node_ids, src_node_id_counts = np.unique(
+            historical_src_node_ids, return_counts=True
+        )
+        unique_dst_node_ids, dst_node_id_counts = np.unique(
+            historical_dst_node_ids, return_counts=True
+        )
+        src_node_id_probabilities = src_node_id_counts / src_node_id_counts.sum()
+        dst_node_id_probabilities = dst_node_id_counts / dst_node_id_counts.sum()
+        if self.seed is None:
+            random_sample_edge_src_node_indices = np.random.choice(
+                len(unique_src_node_ids), size, replace=True, p=src_node_id_probabilities
+            )
+            random_sample_edge_dst_node_indices = np.random.choice(
+                len(unique_dst_node_ids), size, replace=True, p=dst_node_id_probabilities
+            )
+        else:
+            random_sample_edge_src_node_indices = self.random_state.choice(
+                len(unique_src_node_ids), size, replace=True, p=src_node_id_probabilities
+            )
+            random_sample_edge_dst_node_indices = self.random_state.choice(
+                len(unique_dst_node_ids), size, replace=True, p=dst_node_id_probabilities
+            )
+        return unique_src_node_ids[random_sample_edge_src_node_indices], unique_dst_node_ids[random_sample_edge_dst_node_indices], 0, size
+
+    def neighbor_sample(
+        self,
+        size: int,
+        batch_src_node_ids: np.ndarray,
+        batch_dst_node_ids: np.ndarray,
+        current_batch_start_time: float,
+        current_batch_end_time: float,
+    ):
+        """
+        neighbor sampling strategy, which samples negative destination nodes from 2hop neighbors of source nodes
+        :param size: int, number of sampled negative edges
+        :param batch_src_node_ids: ndarray, shape (batch_size, ), source node ids in the current batch
+        :param batch_dst_node_ids: ndarray, shape (batch_size, ), destination node ids in the current batch
+        :param current_batch_start_time: float, start time in the current batch
+        :param current_batch_end_time: float, end time in the current batch
+        :return:
+        """
+        negative_src_node_ids = batch_src_node_ids
+        negative_dst_node_ids = []
+        num_preferred_sample_edges = 0
+        num_random_sample_edges = 0
+
+        # filter neighbors_2hop between current_batch_start_time and current_batch_end_time knowing that neighbors_2hop is sorted by time in ascending order
+        neighbors_2hop = self.neighbors_2hop[
+            (self.neighbors_2hop["ts"] >= current_batch_start_time)
+            & (self.neighbors_2hop["ts"] <= current_batch_end_time)
+        ]
+
+        for i in range(len(batch_src_node_ids)):
+            src_node_id = batch_src_node_ids[i]
+            # find the row with src_node_id in neighbors_2hop
+            neighbors_2hop_row = neighbors_2hop[(neighbors_2hop["u"] == src_node_id)]
+            if len(neighbors_2hop_row) > 0:
+                # select first row
+                neighbors_2hop_row = neighbors_2hop_row.iloc[0]
+                # collect neighbors as int list if not nan
+                if pd.notna(neighbors_2hop_row["two_hop_non_neighbors"]):
+                    neighbors_2hop_list = [int(x) for x in neighbors_2hop_row["two_hop_non_neighbors"].split(";")]
+                else:
+                    neighbors_2hop_list = []
+                if len(neighbors_2hop_list) > 0:
+                    if self.seed is None:
+                        sampled_dst_node_id = np.random.choice(neighbors_2hop_list)
+                    else:
+                        sampled_dst_node_id = self.random_state.choice(neighbors_2hop_list)
+                    num_preferred_sample_edges += 1
+                else:
+                    if self.seed is None:
+                        sampled_dst_node_id = np.random.choice(self.unique_dst_node_ids)
+                    else:
+                        sampled_dst_node_id = self.random_state.choice(self.unique_dst_node_ids)
+                    num_random_sample_edges += 1
+
+                negative_dst_node_ids.append(int(sampled_dst_node_id))
+            
+        # check if we have sampled enough negative edges
+        if len(negative_dst_node_ids) < size:
+            # sample additional random edges
+            additional_edges = size - len(negative_dst_node_ids)
+            if self.seed is None:
+                random_sampled_dst_node_ids = np.random.choice(self.unique_dst_node_ids, size=additional_edges)
+            else:
+                random_sampled_dst_node_ids = self.random_state.choice(self.unique_dst_node_ids, size=additional_edges)
+            negative_dst_node_ids.extend(random_sampled_dst_node_ids)
+            num_random_sample_edges += additional_edges
+
+        return negative_src_node_ids, np.array(negative_dst_node_ids), num_preferred_sample_edges, num_random_sample_edges
+        
 
     def reset_random_state(self):
         """
@@ -1448,3 +1654,5 @@ class NegativeEdgeSampler(object):
         :return:
         """
         self.random_state = np.random.RandomState(self.seed)
+
+

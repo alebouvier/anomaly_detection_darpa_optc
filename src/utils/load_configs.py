@@ -159,6 +159,12 @@ def get_link_prediction_args(is_evaluation: bool = False):
         "--test_ratio", type=float, default=0.35, help="ratio of test set"
     )
     parser.add_argument(
+        "--start_train",
+        type=str,
+        default="2019-09-01T00:00",
+        help="start of training set, only applicable when dataset is optc_201 or optc_051",
+    )
+    parser.add_argument(
         "--start_val",
         type=str,
         default="2019-09-22T12:00",
@@ -167,6 +173,9 @@ def get_link_prediction_args(is_evaluation: bool = False):
     parser.add_argument(
         "--start_test", type=str, default="2019-09-23T00:00", help="start of test set"
     )
+    parser.add_argument(
+        "--end_test", type=str, default="2019-09-30T00:00", help="end of test set, only applicable when dataset is optc_201 or optc_051"
+    )   
     parser.add_argument("--num_runs", type=int, default=1, help="number of runs")
     parser.add_argument(
         "--test_interval_epochs",
@@ -178,7 +187,7 @@ def get_link_prediction_args(is_evaluation: bool = False):
         "--negative_sample_strategy",
         type=str,
         default="random",
-        choices=["random", "historical", "inductive"],
+        choices=["random", "historical", "inductive", "2hop_neighbor", "popular"],
         help="strategy for the negative edge sampling",
     )
     parser.add_argument(
