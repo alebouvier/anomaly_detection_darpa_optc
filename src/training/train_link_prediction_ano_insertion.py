@@ -65,6 +65,7 @@ def main(args):
         data=train_data,
         sample_neighbor_strategy=args.sample_neighbor_strategy,
         time_scaling_factor=args.time_scaling_factor,
+        label_mask_on=True,
         seed=0,
     )
 
@@ -73,6 +74,7 @@ def main(args):
         data=full_data,
         sample_neighbor_strategy=args.sample_neighbor_strategy,
         time_scaling_factor=args.time_scaling_factor,
+        label_mask_on=True,
         seed=1,
     )
 
@@ -317,11 +319,13 @@ def main(args):
                     batch_dst_node_ids,
                     batch_node_interact_times,
                     batch_edge_ids,
+                    batch_edge_labels,
                 ) = (
                     train_data.src_node_ids[normal_train_data_indices],
                     train_data.dst_node_ids[normal_train_data_indices],
                     train_data.node_interact_times[normal_train_data_indices],
                     train_data.edge_ids[normal_train_data_indices],
+                    train_data.labels[normal_train_data_indices],
                 )
 
                 (
@@ -329,11 +333,13 @@ def main(args):
                     batch_ano_dst_node_ids,
                     batch_ano_node_interact_times,
                     batch_ano_edge_ids,
+                    batch_ano_edge_labels,
                 ) = (
                     train_data.src_node_ids[ano_train_data_indices],
                     train_data.dst_node_ids[ano_train_data_indices],
                     train_data.node_interact_times[ano_train_data_indices],
                     train_data.edge_ids[ano_train_data_indices],
+                    train_data.labels[ano_train_data_indices],
                 )
 
                 neg_edge_sample_size = max(0, len(batch_src_node_ids) - len(batch_ano_src_node_ids))
@@ -350,9 +356,11 @@ def main(args):
                         )
                     )
                     batch_neg_src_node_ids = batch_src_node_ids[:neg_edge_sample_size]
+                    batch_neg_edge_labels = np.zeros(neg_edge_sample_size)
                 else:
                     batch_neg_src_node_ids = np.array([], dtype=np.int64)
                     batch_neg_dst_node_ids = np.array([], dtype=np.int64)
+                    batch_neg_edge_labels = np.array([], dtype=np.int64)
                     num_preferred_sample_edges = 0
                     num_random_sample_edges = 0
 
@@ -365,6 +373,7 @@ def main(args):
                     batch_neg_src_node_ids = np.concatenate([batch_neg_src_node_ids, batch_ano_src_node_ids])
                     batch_neg_dst_node_ids = np.concatenate([batch_neg_dst_node_ids, batch_ano_dst_node_ids])
                     batch_neg_node_interact_times = np.concatenate([batch_node_interact_times[:neg_edge_sample_size], batch_ano_node_interact_times])
+                    batch_neg_edge_labels = np.concatenate([batch_neg_edge_labels, batch_ano_dst_node_ids])
                 else:
                     batch_neg_node_interact_times = batch_node_interact_times
 
@@ -411,6 +420,7 @@ def main(args):
                         src_node_ids=batch_src_node_ids,
                         dst_node_ids=batch_dst_node_ids,
                         node_interact_times=batch_node_interact_times,
+                        node_labels=batch_neg_edge_labels,
                         num_neighbors=args.num_neighbors,
                         time_gap=args.time_gap,
                     )
@@ -422,6 +432,7 @@ def main(args):
                             src_node_ids=batch_neg_src_node_ids,
                             dst_node_ids=batch_neg_dst_node_ids,
                             node_interact_times=batch_neg_node_interact_times,
+                            node_labels=batch_neg_edge_labels,
                             num_neighbors=args.num_neighbors,
                             time_gap=args.time_gap,
                         )

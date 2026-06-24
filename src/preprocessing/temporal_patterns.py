@@ -26,7 +26,6 @@ def get_unique_stats_features(client, start_val, start_test):
     node_features["idx"] = node_features.index
     edge_features["idx"] = edge_features.index
 
-    node_features["path_clean"] = node_features["path"].apply(normalize_cmdline)
 
 
     # unique_edges = create_unique_edges_df(edge_list, node_features, edge_features)
@@ -37,7 +36,7 @@ def get_unique_stats_features(client, start_val, start_test):
     test_edges = edge_list[edge_list["ts"] >= test_time]
     anomaly_edges = test_edges[test_edges["label"] == 1]
 
-    edge_features["command_line_clean"] = edge_features["command_line"].apply(normalize_cmdline)
+    edge_features["command_line"] = edge_features["command_line"].apply(normalize_cmdline)
 
     # unique_train_edges = create_unique_edges_df(train_edges, node_features, edge_features)
     # unique_val_edges = create_unique_edges_df( val_edges, node_features, edge_features)
@@ -122,19 +121,18 @@ def create_unique_edges_df(split_edges, node_features, edge_features):
     df = split_edges.merge(source_nodes, left_on="u", right_on="node_idx", how="left").drop(columns=["node_idx"])
     df = df.merge(target_nodes, left_on="i", right_on="node_idx", how="left").drop(columns=["node_idx"])
     df = df.merge(
-        edge_features[["idx", "action_type", "command_line_clean"]],
+        edge_features[["idx", "action_type", "command_line"]],
         on="idx",
         how="left",
     )
 
     return (
         df.groupby(
-            ["object_type_src", "object_type_dst", "action_type", "command_line_clean"],
+            ["object_type_src", "object_type_dst", "action_type", "command_line"],
             dropna=False,
             as_index=False,
         )
         .agg(n_edges=("idx", "size"), n_anomalies=("label", "sum"))
-        .rename(columns={"command_line_clean": "command_line"})
     )
 
 
@@ -211,11 +209,11 @@ def build_edge_signature_df(edges, node_features, edge_features):
     df = edges.merge(source_nodes, on="u", how="left")
     df = df.merge(target_nodes, on="i", how="left")
     df = df.merge(
-        edge_features[["idx", "action_type", "command_line_clean"]],
+        edge_features[["idx", "action_type", "command_line"]],
         on="idx",
         how="left",
     )
-    df["_command_line_key"] = _command_line_key(df["command_line_clean"])
+    df["_command_line_key"] = _command_line_key(df["command_line"])
     return df
 
 
@@ -244,22 +242,22 @@ def find_anomaly_paths_in_train(anomaly_paths, train_edges, node_features, edge_
         how="left",
     )
     anomaly_sig = anomaly_sig.merge(
-        edge_features[["idx", "action_type", "command_line_clean"]].rename(
+        edge_features[["idx", "action_type", "command_line"]].rename(
             columns={
                 "idx": "idx_1",
                 "action_type": "action_type_1",
-                "command_line_clean": "command_line_1",
+                "command_line": "command_line_1",
             }
         ),
         on="idx_1",
         how="left",
     )
     anomaly_sig = anomaly_sig.merge(
-        edge_features[["idx", "action_type", "command_line_clean"]].rename(
+        edge_features[["idx", "action_type", "command_line"]].rename(
             columns={
                 "idx": "idx_2",
                 "action_type": "action_type_2",
-                "command_line_clean": "command_line_2",
+                "command_line": "command_line_2",
             }
         ),
         on="idx_2",
@@ -325,22 +323,55 @@ def normalize_cmdline(cmd):
     if pd.isna(cmd):
         return None
 
-    s = cmd.lower()
-    s = re.sub(r'\\\\\?\\', '', s)                                          # UNC prefix
-    s = re.sub(r'(c:\\users\\)[^\\]+', r'\1<USER>', s)                      # usernames
-    s = re.sub(r'(\\temp\\)[a-z0-9]+\.tmp', r'\1<TMPDIR>', s)               # temp dirs
-    s = re.sub(r'rust_mozprofile\.\S+', 'rust_mozprofile.<TMPPROFILE>', s)  # FF profiles
-    s = re.sub(r'[\w\s\-_.]+\.(pdf|doc|docx|xls|xlsx|txt)', r'<DOC>.\1', s)# documents
-    s = re.sub(r'--channel="[^"]+"', '--channel=<CHANNEL>', s)              # Chrome channel
-    s = re.sub(r'(windowtitle eq )[^"*]+(\*?")', r'\1<WINTITLE>\2', s)      # taskkill titles
-    s = re.sub(r'(/d\s+)"?[^"/\s][^"]*"?', r'\1<REGVAL>', s)               # registry values
-    s = re.sub(r'global\\[a-z_]+\d+_?', r'global\\<PIPE>', s)              # named pipes  ← NEW
-    s = re.sub(r'\{[0-9a-f<>\-_A-Z]+\}', '<GUID>', s)                      # GUIDs        ← NEW
-    s = re.sub(r'\b\d{1,3}(?:\.\d{1,3}){3}\b', '<IP>', s)                  # IPs          ← NEW
-    s = re.sub(r'0x[0-9a-f]+', '<HEX>', s)                                 # hex literals
-    s = re.sub(r'\b[0-9a-f]{4,}\b', '<HEXID>', s)                          # long hex IDs
-    s = re.sub(r'\b\d{3,}\b', '<NUM>', s)                                   # standalone numbers
-    s = re.sub(r'(?<=[a-z_])\d+', '<NUM>', s)                              # embedded numbers ← NEW
+    # case-insensitive
+    s = cmd.lower() 
+
+    # strips the "\\?\" extended-length path prefix some processes add
+    s = re.sub(r'\\\\\?\\', '', s) 
+
+    # replaces the Windows username in user profile paths
+    s = re.sub(r'(c:\\users\\)[^\\]+', r'\1<USER>', s)
+    
+    # replace randomly-named temp folders
+    s = re.sub(r'(\\temp\\)[a-z0-9]+\.tmp', r'\1<TMPDIR>', s)
+
+    # replace Firefox's randomly-generated profile suffix
+    s = re.sub(r'rust_mozprofile\.\S+', 'rust_mozprofile.<TMPPROFILE>', s)
+
+    # replaces document filenames, keeping only the extension
+    s = re.sub(r'[\w\s\-_.]+\.(pdf|doc|docx|xls|xlsx|txt)', r'<DOC>.\1', s)
+
+    # replace Chrome's channel ID 
+    s = re.sub(r'--channel="[^"]+"', '--channel=<CHANNEL>', s)
+
+    # replaces the specific window title in taskkill filters
+    s = re.sub(r'(windowtitle eq )[^"*]+(\*?")', r'\1<WINTITLE>\2', s)
+
+    # replaces the data value passed to "reg add /d" 
+    s = re.sub(r'(/d\s+)"?[^"/\s][^"]*"?', r'\1<REGVAL>', s)
+
+    # replaces named pipe/kernel object names that end in a varying numeric ID
+    s = re.sub(r'global\\[a-z_]+\d+_?', r'global\\<PIPE>', s)
+
+    # replaces GUIDs 
+    s = re.sub(r'\{[0-9a-f<>\-_A-Z]+\}', '<GUID>', s)
+
+    # replaces IP addresses 
+    s = re.sub(r'\b\d{1,3}(?:\.\d{1,3}){3}\b', '<IP>', s)
+
+    # replaces hexadecimal literals
+    s = re.sub(r'0x[0-9a-f]+', '<HEX>', s)
+
+    # replaces long hex-looking standalone IDs (4+ chars)
+    s = re.sub(r'\b[0-9a-f]{4,}\b', '<HEXID>', s)
+
+    # replaces standalone numbers of 3+ digits
+    s = re.sub(r'\b\d{3,}\b', '<NUM>', s)
+
+    # replaces numbers glued onto a word
+    s = re.sub(r'(?<=[a-z_])\d+', '<NUM>', s)
+
+    # collapses repeated spaces left behind by the substitutions above
     s = re.sub(r'  +', ' ', s).strip()
 
     return s
@@ -392,22 +423,22 @@ def create_unique_paths_df(split_path, node_features, edge_features, edge_list):
         how="left",
     )
     path_df = path_df.merge(
-        edge_features[["idx", "action_type", "command_line_clean"]].rename(
+        edge_features[["idx", "action_type", "command_line"]].rename(
             columns={
                 "idx": "idx_1",
                 "action_type": "action_type_1",
-                "command_line_clean": "command_line_1",
+                "command_line": "command_line_1",
             }
         ),
         on="idx_1",
         how="left",
     )
     path_df = path_df.merge(
-        edge_features[["idx", "action_type", "command_line_clean"]].rename(
+        edge_features[["idx", "action_type", "command_line"]].rename(
             columns={
                 "idx": "idx_2",
                 "action_type": "action_type_2",
-                "command_line_clean": "command_line_2",
+                "command_line": "command_line_2",
             }
         ),
         on="idx_2",
@@ -478,6 +509,7 @@ def add_anomaly_paths_in_train_val(unique_anomaly_paths, client, start_val, star
     node_features["idx"] = node_features.index
     edge_features["idx"] = edge_features.index
 
+    edge_features["command_line"] = edge_features["command_line"].apply(normalize_cmdline)
 
     train_val_edges = edge_list[edge_list["ts"] < test_time].copy()
 
@@ -511,8 +543,9 @@ def add_anomaly_paths_in_train_val(unique_anomaly_paths, client, start_val, star
 
     unique_anomaly_paths = unique_anomaly_paths.reset_index(drop=True)
     num_paths = len(unique_anomaly_paths)
-    path_choices = np.random.choice(num_paths, size=int(len(train_val_edges)/10), p=weights.values)
-    train_val_rows = list(train_val_edges.itertuples(index=False, name=None))[::10]
+    ratio = 2
+    path_choices = np.random.choice(num_paths, size=int(len(train_val_edges)/ratio), p=weights.values)
+    train_val_rows = list(train_val_edges.itertuples(index=False, name=None))[::ratio]
 
     path_values = unique_anomaly_paths.loc[path_choices, [
         "object_type_start",

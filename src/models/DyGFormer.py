@@ -115,6 +115,7 @@ class DyGFormer(nn.Module):
         src_node_ids: np.ndarray,
         dst_node_ids: np.ndarray,
         node_interact_times: np.ndarray,
+        node_labels: np.ndarray = None,
     ):
         """
         compute source and destination node temporal embeddings
@@ -130,7 +131,7 @@ class DyGFormer(nn.Module):
             src_nodes_edge_ids_list,
             src_nodes_neighbor_times_list,
         ) = self.neighbor_sampler.get_all_first_hop_neighbors(
-            node_ids=src_node_ids, node_interact_times=node_interact_times
+            node_ids=src_node_ids, node_interact_times=node_interact_times, node_labels=node_labels
         )
 
         # three lists to store destination nodes' first-hop neighbor ids, edge ids and interaction timestamp information, with batch_size as the list length
@@ -139,7 +140,7 @@ class DyGFormer(nn.Module):
             dst_nodes_edge_ids_list,
             dst_nodes_neighbor_times_list,
         ) = self.neighbor_sampler.get_all_first_hop_neighbors(
-            node_ids=dst_node_ids, node_interact_times=node_interact_times
+            node_ids=dst_node_ids, node_interact_times=node_interact_times, node_labels=node_labels
         )
 
         # pad the sequences of first-hop neighbors for source and destination nodes
@@ -153,6 +154,7 @@ class DyGFormer(nn.Module):
         ) = self.pad_sequences(
             node_ids=src_node_ids,
             node_interact_times=node_interact_times,
+            node_labels=node_labels,
             nodes_neighbor_ids_list=src_nodes_neighbor_ids_list,
             nodes_edge_ids_list=src_nodes_edge_ids_list,
             nodes_neighbor_times_list=src_nodes_neighbor_times_list,
@@ -170,6 +172,7 @@ class DyGFormer(nn.Module):
         ) = self.pad_sequences(
             node_ids=dst_node_ids,
             node_interact_times=node_interact_times,
+            node_labels=node_labels,
             nodes_neighbor_ids_list=dst_nodes_neighbor_ids_list,
             nodes_edge_ids_list=dst_nodes_edge_ids_list,
             nodes_neighbor_times_list=dst_nodes_neighbor_times_list,
@@ -352,6 +355,7 @@ class DyGFormer(nn.Module):
         self,
         node_ids: np.ndarray,
         node_interact_times: np.ndarray,
+        node_labels: np.ndarray,
         nodes_neighbor_ids_list: list,
         nodes_edge_ids_list: list,
         nodes_neighbor_times_list: list,
