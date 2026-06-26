@@ -21,7 +21,7 @@ from itertools import groupby
 from utils.utils import BASE, create_folder, save_pkl
 
 OBJECT_TYPES = {"PROCESS", "FILE", "SHELL"}
-EDGE_COLUMNS = ["u", "i", "ts", "label", "idx"]
+EDGE_COLUMNS = ["u", "i", "ts", "label", "pattern_id", "idx"]
 EDGE_FEATURE_COLUMNS = ["action_type", "command_line"]
 NODE_COLUMNS = ["object_type", "path"]
 
@@ -69,6 +69,7 @@ def collect_log_stats(log_iter: Iterator[dict], anomalies) -> LogStats:
     path_cmd_list: List[str] = []
     node_idx = 1
     edge_idx = 1
+    pattern_id = 0
 
     for log in log_iter:
         object_type = safe_get(log, "object")
@@ -117,8 +118,9 @@ def collect_log_stats(log_iter: Iterator[dict], anomalies) -> LogStats:
             label = 1
         else:
             label = 0
+        
 
-        edge_list.append([objects[actor_key], objects[object_key], parse_timestamp(timestamp_str), label, edge_idx])
+        edge_list.append([objects[actor_key], objects[object_key], parse_timestamp(timestamp_str), label, pattern_id, edge_idx])
         edge_features.append([action_type, command_line])
         edge_idx += 1
 
@@ -126,8 +128,8 @@ def collect_log_stats(log_iter: Iterator[dict], anomalies) -> LogStats:
     sorted_edges = sorted(edge_list, key=lambda edge: edge[2])
     sorted_edge_features: List[List] = [[None, None]]
     for new_idx, edge in enumerate(sorted_edges, start=1):
-        old_idx = edge[4]
-        edge[4] = new_idx
+        old_idx = edge[-1]
+        edge[-1] = new_idx
         sorted_edge_features.append(edge_features[old_idx])
 
     return LogStats(

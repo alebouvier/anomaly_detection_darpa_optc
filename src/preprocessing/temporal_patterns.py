@@ -1,3 +1,4 @@
+from collections import defaultdict
 import gzip
 import json
 import importlib
@@ -560,7 +561,7 @@ def add_anomaly_paths_in_train_val(unique_anomaly_paths, client, start_val, star
 
     node_pools = {k: np.asarray(v, dtype=int) for k, v in nodes_by_type.items()}
 
-    for train_val_edge, path in tqdm(zip(train_val_rows, path_values)):
+    for id, (train_val_edge, path) in tqdm(enumerate(zip(train_val_rows, path_values))):
         start_nodes = node_pools.get(path["object_type_start"])
         middle_nodes = node_pools.get(path["object_type_middle"])
         end_nodes = node_pools.get(path["object_type_end"])
@@ -584,9 +585,9 @@ def add_anomaly_paths_in_train_val(unique_anomaly_paths, client, start_val, star
         ts2 = ts1 + max(path.get("delta_t", 0.001), 0.001)
 
         edge1 = {col: getattr(train_val_edge, col) if hasattr(train_val_edge, col) else np.nan for col in edge_list_columns}
-        edge1.update({"u": start_node, "i": middle_node, "ts": ts1, "label": 1})
+        edge1.update({"u": start_node, "i": middle_node, "ts": ts1, "label": 1, "pattern_id": id+1})
         edge2 = {col: getattr(train_val_edge, col) if hasattr(train_val_edge, col) else np.nan for col in edge_list_columns}
-        edge2.update({"u": middle_node, "i": end_node, "ts": ts2, "label": 1})
+        edge2.update({"u": middle_node, "i": end_node, "ts": ts2, "label": 1, "pattern_id": id+1})
 
         if ts1 < test_time:
             new_edge_list.append(edge1)
@@ -635,16 +636,49 @@ def add_anomaly_paths_in_train_val(unique_anomaly_paths, client, start_val, star
 
 
 
+class DSU:
+    def __init__(self):
+        self.parent = {}
+        self.rank = {}
+
+    def find(self, x):
+        self.parent.setdefault(x, x)
+        while self.parent[x] != x:
+            self.parent[x] = self.parent[self.parent[x]]  # path compression
+            x = self.parent[x]
+        return x
+
+    def union(self, a, b):
+        ra, rb = self.find(a), self.find(b)
+        if ra == rb: return
+        if self.rank.get(ra, 0) < self.rank.get(rb, 0): ra, rb = rb, ra
+        self.parent[rb] = ra
+        self.rank[ra] = self.rank.get(ra, 0) + 1
 
 
 
+def get_anomaly_connected_components(client):
+    edge_list_file_path = f"{BASE}/processed_data/optc_{client}/ml_optc_{client}.csv"
+    edge_list = pd.read_csv(edge_list_file_path, header=0)
+    anomaly_edges = edge_list[edge_list["label"] == 1]
 
+    dsu = DSU()
+    for id , edge  in anomaly_edges.iterrows():
+        src = edge["u"]
+        dst = edge["i"]
+        dsu.union(src, dst)
+    components = defaultdict(list)
+    
+    for node in dsu.parent:
+        components[dsu.find(node)].append(node)
+    for comp in components.values():
+        print(len(comp))
 
 def main(clients, start_val, start_test):
     for client in clients:
-        unique_anomaly_paths = get_unique_stats_features(client, start_val, start_test)
-        # unique_anomaly_paths = pd.read_csv(f"{BASE}/processed_data/optc_{client}/unique_anomaly_paths.csv")
-        edge_list, edge_features = add_anomaly_paths_in_train_val(unique_anomaly_paths, client, start_val, start_test)
-        edge_list.to_csv(f"{BASE}/processed_data/optc_{client}/ml_optc_{client}.csv", index=False)
-        edge_features.to_csv(f"{BASE}/processed_data/optc_{client}/edge_features.csv", index=False)
-
+        # unique_anomaly_paths = get_unique_stats_features(client, start_val, start_test)
+        # # unique_anomaly_paths = pd.read_csv(f"{BASE}/processed_data/optc_{client}/unique_anomaly_paths.csv")
+        # edge_list, edge_features = add_anomaly_paths_in_train_val(unique_anomaly_paths, client, start_val, start_test)
+        # edge_list.to_csv(f"{BASE}/processed_data/optc_{client}/ml_optc_{client}.csv", index=False)
+        # edge_features.to_csv(f"{BASE}/processed_data/optc_{client}/edge_features.csv", index=False)
+        get_anomaly_connected_components(client)

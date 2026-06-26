@@ -68,6 +68,7 @@ def main(args):
         sample_neighbor_strategy=args.sample_neighbor_strategy,
         time_scaling_factor=args.time_scaling_factor,
         seed=1,
+        pattern_masking=args.pattern_masking,
     )
 
     # initialize negative samplers, set seeds for validation and testing so negatives are the same across different runs

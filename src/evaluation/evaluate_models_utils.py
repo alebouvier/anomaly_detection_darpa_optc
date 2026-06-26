@@ -343,11 +343,15 @@ def evaluate_model_link_prediction_ano_insertion(
                 batch_dst_node_ids,
                 batch_node_interact_times,
                 batch_edge_ids,
+                batch_labels,
+                batch_pattern_ids,
             ) = (
                 evaluate_data.src_node_ids[normal_evaluate_data_indices],
                 evaluate_data.dst_node_ids[normal_evaluate_data_indices],
                 evaluate_data.node_interact_times[normal_evaluate_data_indices],
                 evaluate_data.edge_ids[normal_evaluate_data_indices],
+                evaluate_data.labels[normal_evaluate_data_indices],
+                evaluate_data.pattern_ids[normal_evaluate_data_indices],
             )
 
             (
@@ -355,11 +359,15 @@ def evaluate_model_link_prediction_ano_insertion(
                 batch_ano_dst_node_ids,
                 batch_ano_node_interact_times,
                 batch_ano_edge_ids,
+                batch_ano_labels,
+                batch_ano_pattern_ids,
             ) = (
                 evaluate_data.src_node_ids[ano_evaluate_data_indices],
                 evaluate_data.dst_node_ids[ano_evaluate_data_indices],
                 evaluate_data.node_interact_times[ano_evaluate_data_indices],
                 evaluate_data.edge_ids[ano_evaluate_data_indices],
+                evaluate_data.labels[ano_evaluate_data_indices],
+                evaluate_data.pattern_ids[ano_evaluate_data_indices],
             )
 
             neg_edge_sample_size = max(0, len(batch_src_node_ids) - len(batch_ano_src_node_ids))
@@ -377,19 +385,24 @@ def evaluate_model_link_prediction_ano_insertion(
                     )
                 )
                 batch_neg_src_node_ids = batch_src_node_ids[:neg_edge_sample_size]
+                batch_neg_labels = np.zeros(neg_edge_sample_size)
+                batch_neg_pattern_ids = np.zeros(neg_edge_sample_size)
             else:
                 batch_neg_src_node_ids = np.array([], dtype=np.int64)
                 batch_neg_dst_node_ids = np.array([], dtype=np.int64)
+                batch_neg_labels = np.array([], dtype=np.int64)
+                batch_neg_pattern_ids = np.array([], dtype=np.int64)
+                
 
             if len(batch_ano_src_node_ids) > 0:
                 batch_neg_src_node_ids = np.concatenate([batch_neg_src_node_ids, batch_ano_src_node_ids])
                 batch_neg_dst_node_ids = np.concatenate([batch_neg_dst_node_ids, batch_ano_dst_node_ids])
                 batch_neg_node_interact_times = np.concatenate([batch_node_interact_times[:neg_edge_sample_size], batch_ano_node_interact_times])
+                batch_neg_labels = np.concatenate([batch_neg_labels, batch_ano_labels])
+                batch_neg_pattern_ids = np.concatenate([batch_neg_pattern_ids, batch_ano_pattern_ids])
             else:
                 batch_neg_node_interact_times = batch_node_interact_times
 
-            if len(batch_neg_node_interact_times) != len(batch_neg_src_node_ids):
-                print("problem")
 
             # we need to compute for positive and negative edges respectively, because the new sampling strategy (for evaluation) allows the negative source nodes to be
             # different from the source nodes, this is different from previous works that just replace destination nodes with negative destination nodes
@@ -402,6 +415,7 @@ def evaluate_model_link_prediction_ano_insertion(
                     src_node_ids=batch_src_node_ids,
                     dst_node_ids=batch_dst_node_ids,
                     node_interact_times=batch_node_interact_times,
+                    node_pattern_ids=batch_pattern_ids,
                     num_neighbors=num_neighbors,
                 )
 
@@ -424,6 +438,7 @@ def evaluate_model_link_prediction_ano_insertion(
                     src_node_ids=batch_src_node_ids,
                     dst_node_ids=batch_dst_node_ids,
                     node_interact_times=batch_node_interact_times,
+                    node_pattern_ids=batch_pattern_ids,
                     num_neighbors=num_neighbors,
                     time_gap=time_gap,
                 )
@@ -448,6 +463,7 @@ def evaluate_model_link_prediction_ano_insertion(
                     src_node_ids=batch_src_node_ids,
                     dst_node_ids=batch_dst_node_ids,
                     node_interact_times=batch_node_interact_times,
+                    node_pattern_ids=batch_pattern_ids,
                 )
 
                 # get temporal embedding of negative source and negative destination nodes
@@ -471,6 +487,7 @@ def evaluate_model_link_prediction_ano_insertion(
                     src_node_ids=batch_neg_src_node_ids,
                     dst_node_ids=batch_neg_dst_node_ids,
                     node_interact_times=batch_neg_node_interact_times,
+                    node_pattern_ids=batch_pattern_ids,
                     edge_ids=None,
                     edges_are_positive=False,
                     num_neighbors=num_neighbors,

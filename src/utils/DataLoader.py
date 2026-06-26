@@ -54,6 +54,7 @@ class Data:
         node_interact_times: np.ndarray,
         edge_ids: np.ndarray,
         labels: np.ndarray,
+        pattern_ids: np.ndarray,
     ):
         """
         Data object to store the nodes interaction information.
@@ -68,6 +69,7 @@ class Data:
         self.node_interact_times = node_interact_times
         self.edge_ids = edge_ids
         self.labels = labels
+        self.pattern_ids = pattern_ids
         self.num_interactions = len(src_node_ids)
         self.unique_node_ids = set(src_node_ids) | set(dst_node_ids)
         self.num_unique_nodes = len(self.unique_node_ids)
@@ -149,6 +151,7 @@ def get_link_prediction_data(
     node_interact_times = graph_df.ts.values.astype(np.float64)
     edge_ids = graph_df.idx.values.astype(np.longlong)
     labels = graph_df.label.values
+    pattern_ids = graph_df.pattern_id.values
 
     full_data = Data(
         src_node_ids=src_node_ids,
@@ -156,6 +159,7 @@ def get_link_prediction_data(
         node_interact_times=node_interact_times,
         edge_ids=edge_ids,
         labels=labels,
+        pattern_ids=pattern_ids,
     )
 
     # the setting of seed follows previous works
@@ -251,6 +255,7 @@ def get_link_prediction_data(
         node_interact_times=node_interact_times[train_mask],
         edge_ids=edge_ids[train_mask],
         labels=labels[train_mask],
+        pattern_ids=pattern_ids[train_mask],
     )
 
     if calibration:
@@ -260,6 +265,7 @@ def get_link_prediction_data(
             node_interact_times=node_interact_times[cal_mask],
             edge_ids=edge_ids[cal_mask],
             labels=labels[cal_mask],
+            pattern_ids=pattern_ids[cal_mask],
         )
     else:
         cal_data = None
@@ -296,6 +302,7 @@ def get_link_prediction_data(
         node_interact_times=node_interact_times[val_mask],
         edge_ids=edge_ids[val_mask],
         labels=labels[val_mask],
+        pattern_ids=pattern_ids[val_mask],
     )
 
     test_data = Data(
@@ -304,6 +311,7 @@ def get_link_prediction_data(
         node_interact_times=node_interact_times[test_mask],
         edge_ids=edge_ids[test_mask],
         labels=labels[test_mask],
+        pattern_ids=pattern_ids[test_mask],
     )
 
     if inductive:

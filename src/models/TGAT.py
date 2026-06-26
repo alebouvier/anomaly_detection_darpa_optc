@@ -78,7 +78,7 @@ class TGAT(nn.Module):
         src_node_ids: np.ndarray,
         dst_node_ids: np.ndarray,
         node_interact_times: np.ndarray,
-        node_labels: np.ndarray = None,
+        node_pattern_ids: np.ndarray = None,
         num_neighbors: int = 20,
     ):
         """
@@ -93,7 +93,7 @@ class TGAT(nn.Module):
         src_node_embeddings = self.compute_node_temporal_embeddings(
             node_ids=src_node_ids,
             node_interact_times=node_interact_times,
-            node_labels=node_labels,
+            node_pattern_ids=node_pattern_ids,
             current_layer_num=self.num_layers,
             num_neighbors=num_neighbors,
         )
@@ -101,7 +101,7 @@ class TGAT(nn.Module):
         dst_node_embeddings = self.compute_node_temporal_embeddings(
             node_ids=dst_node_ids,
             node_interact_times=node_interact_times,
-            node_labels=node_labels,
+            node_pattern_ids=node_pattern_ids,
             current_layer_num=self.num_layers,
             num_neighbors=num_neighbors,
         )
@@ -111,7 +111,7 @@ class TGAT(nn.Module):
         self,
         node_ids: np.ndarray,
         node_interact_times: np.ndarray,
-        node_labels: np.ndarray = None,
+        node_pattern_ids: np.ndarray = None,
         current_layer_num: int = 0,
         num_neighbors: int = 20,
     ):
@@ -145,7 +145,7 @@ class TGAT(nn.Module):
             node_conv_features = self.compute_node_temporal_embeddings(
                 node_ids=node_ids,
                 node_interact_times=node_interact_times,
-                node_labels=node_labels,
+                node_pattern_ids=node_pattern_ids,
                 current_layer_num=current_layer_num - 1,
                 num_neighbors=num_neighbors,
             )
@@ -154,11 +154,11 @@ class TGAT(nn.Module):
             # neighbor_node_ids, ndarray, shape (batch_size, num_neighbors)
             # neighbor_edge_ids, ndarray, shape (batch_size, num_neighbors)
             # neighbor_times, ndarray, shape (batch_size, num_neighbors)
-            neighbor_node_ids, neighbor_edge_ids, neighbor_times = (
+            neighbor_node_ids, neighbor_edge_ids, neighbor_times, neighbor_pattern_ids = (
                 self.neighbor_sampler.get_historical_neighbors(
                     node_ids=node_ids,
                     node_interact_times=node_interact_times,
-                    node_labels=node_labels,
+                    node_pattern_ids=node_pattern_ids,
                     num_neighbors=num_neighbors,
                 )
             )
@@ -168,7 +168,7 @@ class TGAT(nn.Module):
             neighbor_node_conv_features = self.compute_node_temporal_embeddings(
                 node_ids=neighbor_node_ids.flatten(),
                 node_interact_times=neighbor_times.flatten(),
-                node_labels=node_labels,
+                node_pattern_ids=node_pattern_ids.flatten(),
                 current_layer_num=current_layer_num - 1,
                 num_neighbors=num_neighbors,
             )

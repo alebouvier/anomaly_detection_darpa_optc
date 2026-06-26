@@ -228,6 +228,13 @@ def get_link_prediction_args(is_evaluation: bool = False):
         action="store_true",
         help="whether to put anomalous nodes in train data",
     )
+    parser.add_argument(
+        "--pattern_masking",
+        type=str,
+        default="no",
+        choices=["no", "all", "specific"],
+        help="method for masking negative sampling patterns during training",
+    )
 
     try:
         args = parser.parse_known_args()[0]
