@@ -10,7 +10,10 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from utils.utils import period, round_duration, save_pkl, open_config, BASE
+try:
+    from utils.utils import period, round_duration, save_pkl, open_config, BASE
+except ModuleNotFoundError:  # pragma: no cover - fallback for repo-root execution
+    from src.utils.utils import period, round_duration, save_pkl, open_config, BASE
 
 def get_unique_stats_features(client, start_val, start_test):
     val_time = dt.datetime.strptime(start_val, "%Y-%m-%dT%H:%M").timestamp()
@@ -544,7 +547,7 @@ def add_anomaly_paths_in_train_val(unique_anomaly_paths, client, start_val, star
 
     unique_anomaly_paths = unique_anomaly_paths.reset_index(drop=True)
     num_paths = len(unique_anomaly_paths)
-    ratio = 2
+    ratio = 10
     path_choices = np.random.choice(num_paths, size=int(len(train_val_edges)/ratio), p=weights.values)
     train_val_rows = list(train_val_edges.itertuples(index=False, name=None))[::ratio]
 
@@ -636,6 +639,131 @@ def add_anomaly_paths_in_train_val(unique_anomaly_paths, client, start_val, star
 
 
 
+
+def add_anomaly_frames_in_train_val(anomaly_frames, client, start_val, start_test):
+    """Inject anomaly-frame edges into the train/validation split.
+
+    The function samples a portion of the historical edges, then inserts the
+    edges contained in each anomaly frame using the frame's node and temporal
+    structure. It also appends matching edge-feature rows so the resulting
+    dataframes stay aligned.
+    """
+    _ = dt.datetime.strptime(start_val, "%Y-%m-%dT%H:%M").timestamp()
+    test_time = dt.datetime.strptime(start_test, "%Y-%m-%dT%H:%M").timestamp()
+
+    node_feature_file_path = f"{BASE}/processed_data/optc_{client}/node_features.csv"
+    node_features = pd.read_csv(node_feature_file_path, header=0)
+    edge_feature_file_path = f"{BASE}/processed_data/optc_{client}/edge_features.csv"
+    edge_features = pd.read_csv(edge_feature_file_path, header=0)
+    edge_list_file_path = f"{BASE}/processed_data/optc_{client}/ml_optc_{client}.csv"
+    edge_list = pd.read_csv(edge_list_file_path, header=0)
+
+    node_features["idx"] = node_features.index
+    edge_features["idx"] = edge_features.index
+
+    if "command_line" in edge_features.columns:
+        edge_features["command_line"] = edge_features["command_line"].apply(normalize_cmdline)
+
+    train_val_edges = edge_list[edge_list["ts"] < test_time].copy()
+
+    if anomaly_frames is None or anomaly_frames.empty or train_val_edges.empty:
+        return edge_list, edge_features
+
+    anomaly_ratio = 1
+    num_max_anomalies = int(len(train_val_edges) * anomaly_ratio)
+    if num_max_anomalies <= 0:
+        return edge_list, edge_features
+
+    new_edge_list = []
+    new_edge_features = []
+    edge_list_columns = edge_list.columns.tolist()
+    feature_columns = edge_features.columns.tolist()
+
+    nodes_by_type = node_features.groupby("object_type")["idx"].apply(list).to_dict()
+
+    id_pattern = 0
+
+    while len(new_edge_list) < num_max_anomalies:
+        # sample one window id
+        window_ids = anomaly_frames["window_id"].unique()
+        sampled_window_id = np.random.choice(window_ids, size=1)[0]
+        sampled_frames = anomaly_frames[anomaly_frames["window_id"] == sampled_window_id]
+        id_pattern += 1
+
+        # sample one edge from the train/validation edges to use as a base for the new edges
+        base_edge = train_val_edges.sample(n=1).iloc[0]
+
+        # substract min timestamp from all frames to keep the relative temporal structure
+        sampled_frames["ts"] = sampled_frames["ts"] - sampled_frames["ts"].min() + base_edge["ts"]
+
+        node_attribution = {}
+
+        for frame_idx, frame in sampled_frames.iterrows():
+            if "u" not in frame.index or "i" not in frame.index:
+                continue
+
+            frame_start_node = int(frame["u"])
+            frame_end_node = int(frame["i"])
+            frame_ts = float(frame.get("ts", base_edge["ts"]))
+
+            start_nodes_candidates = nodes_by_type.get(node_features.loc[frame_start_node, "object_type"], [])
+            end_nodes_candidates = nodes_by_type.get(node_features.loc[frame_end_node, "object_type"], [])
+
+            if frame_start_node in node_attribution:
+                start_node = node_attribution[frame_start_node]
+            else:
+                start_node = np.random.choice(start_nodes_candidates)
+                node_attribution[frame_start_node] = start_node
+            
+            if frame_end_node in node_attribution:
+                end_node = node_attribution[frame_end_node]
+            else:
+                end_node = np.random.choice(end_nodes_candidates)
+                node_attribution[frame_end_node] = end_node
+
+            new_edge = {col: getattr(base_edge, col) if hasattr(base_edge, col) else np.nan for col in edge_list_columns}
+            new_edge.update(
+                {
+                    "u": start_node,
+                    "i": end_node,
+                    "ts": frame_ts,
+                    "label": 1,
+                    "pattern_id": id_pattern,
+                }
+            )
+            new_edge_list.append(new_edge)
+
+            feature_row = {col: np.nan for col in feature_columns}
+            feature_row.update(
+                {
+                    "action_type": frame.get("action_type", np.nan),
+                    "command_line": frame.get("command_line", np.nan),
+                }
+            )
+            new_edge_features.append(feature_row)
+
+    if not new_edge_list:
+        return edge_list, edge_features
+
+    edge_list = pd.concat([edge_list, pd.DataFrame(new_edge_list)], ignore_index=True, sort=False)
+    edge_features = pd.concat([edge_features, pd.DataFrame(new_edge_features)], ignore_index=True, sort=False)
+
+    edge_list["_original_row"] = np.arange(len(edge_list)) + 1
+    edge_list = edge_list.sort_values(by="ts", kind="mergesort").reset_index(drop=True)
+
+    edge_features = edge_features.loc[edge_list["_original_row"]].reset_index(drop=True)
+    edge_list = edge_list.drop(columns=["_original_row"])
+
+    edge_list["idx"] = edge_list.index + 1
+    edge_features = edge_features.drop(columns=["idx"])
+    edge_features = pd.concat(
+        [pd.DataFrame([{"action_type": np.nan, "command_line": np.nan}]), edge_features],
+        ignore_index=True,
+        sort=False,
+    )
+
+    return edge_list, edge_features
+
 class DSU:
     def __init__(self):
         self.parent = {}
@@ -674,11 +802,207 @@ def get_anomaly_connected_components(client):
     for comp in components.values():
         print(len(comp))
 
+
+def extract_anomalies_by_sliding_windows(edge_list, window_minutes=15, step_minutes=15, time_col="ts", label_col="label"):
+    """Return anomalous edges annotated with their overlapping time windows.
+
+    The input dataframe is sorted by time and split into overlapping windows of
+    ``window_minutes`` duration, sliding forward by ``step_minutes``.
+    Only rows where ``label_col`` equals ``1`` are returned, each with the window
+    boundaries they belong to.
+    """
+    if edge_list is None:
+        raise ValueError("edge_list cannot be None")
+
+    if time_col not in edge_list.columns:
+        raise KeyError(f"Missing time column: {time_col}")
+    if label_col not in edge_list.columns:
+        raise KeyError(f"Missing label column: {label_col}")
+
+    edge_list = edge_list[[time_col, label_col] + [col for col in edge_list.columns if col not in {time_col, label_col}]].copy()
+    edge_list = edge_list.sort_values(by=time_col, kind="mergesort").reset_index(drop=True)
+
+    edge_list[time_col] = pd.to_numeric(edge_list[time_col], errors="coerce")
+    valid_edges = edge_list.dropna(subset=[time_col]).copy()
+
+    if valid_edges.empty:
+        return pd.DataFrame(columns=[*edge_list.columns, "window_id", "window_start", "window_end"])
+
+    window_seconds = int(window_minutes) * 60
+    step_seconds = int(step_minutes) * 60
+    if window_seconds <= 0 or step_seconds <= 0:
+        raise ValueError("window_minutes and step_minutes must be positive")
+
+    start_ts = int(np.floor(valid_edges[time_col].min() / step_seconds) * step_seconds)
+    end_ts = int(np.ceil(valid_edges[time_col].max() / step_seconds) * step_seconds)
+
+    anomaly_frames = []
+    current_ts = start_ts
+    window_id = 0
+    while current_ts < end_ts:
+        window_end = current_ts + window_seconds
+        window_edges = valid_edges[(valid_edges[time_col] >= current_ts) & (valid_edges[time_col] < window_end)]
+        if not window_edges.empty:
+            anomalies = window_edges[window_edges[label_col] == 1]
+            if not anomalies.empty:
+                anomalies = anomalies.copy()
+                anomalies["window_id"] = window_id
+                anomalies["window_start"] = current_ts
+                anomalies["window_end"] = window_end
+                anomaly_frames.append(anomalies)
+
+        current_ts += step_seconds
+        window_id += 1
+
+    if not anomaly_frames:
+        return pd.DataFrame(columns=[*edge_list.columns, "window_id", "window_start", "window_end"])
+
+    return pd.concat(anomaly_frames, ignore_index=True)
+
+
+def extract_anomalies_from_test_data(client, start_test, window_minutes=15, step_minutes=15):
+    """Load the processed test edges and extract anomalous rows by sliding windows."""
+    edge_list_file_path = f"{BASE}/processed_data/optc_{client}/ml_optc_{client}.csv"
+    edge_list = pd.read_csv(edge_list_file_path, header=0)
+
+    test_time = dt.datetime.strptime(start_test, "%Y-%m-%dT%H:%M").timestamp()
+    test_edges = edge_list[edge_list["ts"] >= test_time].copy()
+
+    return extract_anomalies_by_sliding_windows(
+        test_edges,
+        window_minutes=window_minutes,
+        step_minutes=step_minutes,
+    )
+
+
+def temporal_metapath_mining(client, start_val, start_test):
+    val_time = dt.datetime.strptime(start_val, "%Y-%m-%dT%H:%M").timestamp()
+    test_time = dt.datetime.strptime(start_test, "%Y-%m-%dT%H:%M").timestamp()
+
+    node_feature_file_path = f"{BASE}/processed_data/optc_{client}/node_features.csv"
+    node_features = pd.read_csv(node_feature_file_path, header=0)
+    edge_feature_file_path = f"{BASE}/processed_data/optc_{client}/edge_features.csv"
+    edge_features = pd.read_csv(edge_feature_file_path, header=0)
+    edge_list_file_path = f"{BASE}/processed_data/optc_{client}/ml_optc_{client}.csv"
+    edge_list = pd.read_csv(edge_list_file_path, header=0)
+
+    if edge_list.empty:
+        return pd.DataFrame(columns=["path_length", "start_node", "end_node", "start_ts", "end_ts", "type_seq"])
+
+    anomaly_edges = edge_list[ (edge_list["ts"] > test_time) & (edge_list["label"] == 1)]
+
+    anomaly_edges = anomaly_edges.copy()
+    edge_features = edge_features.copy()
+    node_features = node_features.copy()
+
+    if "idx" not in anomaly_edges.columns:
+        anomaly_edges["idx"] = np.arange(len(anomaly_edges))
+    if "idx" not in edge_features.columns:
+        edge_features["idx"] = np.arange(len(edge_features))
+    if "idx" not in node_features.columns:
+        node_features["idx"] = np.arange(len(node_features))
+
+    source_nodes = node_features[["idx", "object_type"]].rename(columns={"idx": "src", "object_type": "src_type"})
+    target_nodes = node_features[["idx", "object_type"]].rename(columns={"idx": "dst", "object_type": "dst_type"})
+
+    edges = (
+        anomaly_edges.rename(columns={"u": "src", "i": "dst", "idx": "edge_idx"})
+        .merge(source_nodes, on="src", how="left")
+        .merge(target_nodes, on="dst", how="left")
+        .merge(
+            edge_features[["idx", "action_type", "command_line"]].rename(columns={"idx": "edge_idx", "action_type": "edge_type", "command_line": "cmd_line"}),
+            on="edge_idx",
+            how="left",
+        )[["src", "dst", "ts", "src_type", "dst_type", "edge_type", "cmd_line"]]
+        .copy()
+    )
+
+    frontier = pd.DataFrame(
+        {
+            "start_node": edges["src"],
+            "end_node": edges["dst"],
+            "start_ts": edges["ts"],
+            "end_ts": edges["ts"],
+            "type_seq": [
+                ((src_type, edge_type, cmd_line, dst_type),)
+                for src_type, edge_type, cmd_line, dst_type in zip(edges["src_type"], edges["edge_type"], edges["cmd_line"], edges["dst_type"])
+            ],
+        }
+    )
+
+    min_support = 20
+    max_hops = 5
+    max_span = 5 * 3600
+
+    results = []
+    current_frontier = frontier
+    for hop in range(1, max_hops + 1):
+        if current_frontier.empty:
+            break
+
+        current_frontier = current_frontier.copy()
+        current_frontier["path_length"] = hop
+        results.append(
+            current_frontier[["path_length", "start_node", "end_node", "start_ts", "end_ts", "type_seq"]].copy()
+        )
+
+        if hop == max_hops:
+            break
+        
+        # prune low-support prefixes BEFORE extending (anti-monotonic pruning)
+        support_counts = (
+            current_frontier.groupby("type_seq", dropna=False)
+            .agg(support=("start_node", lambda s: s.nunique()))
+            .reset_index()
+        )
+        valid_prefixes = support_counts.loc[support_counts["support"] >= min_support, "type_seq"]
+        if valid_prefixes.empty:
+            break
+
+        current_frontier = current_frontier.loc[current_frontier["type_seq"].isin(valid_prefixes)].copy()
+        if current_frontier.empty:
+            break
+
+        extended_rows = []
+        for _, path in tqdm(current_frontier.iterrows(), total=current_frontier.shape[0]):
+            candidates = edges.loc[
+                (edges["src"] == path["end_node"])
+                & (edges["ts"] >= path["end_ts"])
+                & ((edges["ts"] - path["start_ts"]) <= max_span)
+            ]
+            for _, candidate in candidates.iterrows():
+                extended_rows.append(
+                    {
+                        "start_node": path["start_node"],
+                        "end_node": candidate["dst"],
+                        "start_ts": path["start_ts"],
+                        "end_ts": candidate["ts"],
+                        "type_seq": path["type_seq"] + ((candidate["src_type"], candidate["edge_type"], candidate["cmd_line"], candidate["dst_type"]),),
+                    }
+                )
+
+        current_frontier = pd.DataFrame(
+            extended_rows,
+            columns=["start_node", "end_node", "start_ts", "end_ts", "type_seq"],
+        )
+
+    if not results:
+        return pd.DataFrame(columns=["path_length", "start_node", "end_node", "start_ts", "end_ts", "type_seq"])
+
+    return pd.concat(results, ignore_index=True)
+
 def main(clients, start_val, start_test):
     for client in clients:
         # unique_anomaly_paths = get_unique_stats_features(client, start_val, start_test)
-        # # unique_anomaly_paths = pd.read_csv(f"{BASE}/processed_data/optc_{client}/unique_anomaly_paths.csv")
+        # unique_anomaly_paths = pd.read_csv(f"{BASE}/processed_data/optc_{client}/unique_anomaly_paths.csv")
         # edge_list, edge_features = add_anomaly_paths_in_train_val(unique_anomaly_paths, client, start_val, start_test)
         # edge_list.to_csv(f"{BASE}/processed_data/optc_{client}/ml_optc_{client}.csv", index=False)
         # edge_features.to_csv(f"{BASE}/processed_data/optc_{client}/edge_features.csv", index=False)
-        get_anomaly_connected_components(client)
+        # get_anomaly_connected_components(client)
+        # results = temporal_metapath_mining(client, start_val, start_test)
+        # results.to_csv(f"{BASE}/processed_data/optc_{client}/metapath.csv", index=False)
+        anomaly_frames = extract_anomalies_from_test_data(client, start_test, window_minutes=15, step_minutes=15)
+        anomaly_frames.to_csv(f"{BASE}/processed_data/optc_{client}/anomaly_frames.csv", index=False)
+        edge_list, edge_features = add_anomaly_frames_in_train_val(anomaly_frames, client, start_val, start_test)
+        edge_list.to_csv(f"{BASE}/processed_data/optc_{client}/ml_optc_{client}.csv", index=False)
+        edge_features.to_csv(f"{BASE}/processed_data/optc_{client}/edge_features.csv", index=False)

@@ -72,11 +72,13 @@ def evaluate_model_link_prediction(
                 batch_dst_node_ids,
                 batch_node_interact_times,
                 batch_edge_ids,
+                batch_pattern_ids,
             ) = (
                 evaluate_data.src_node_ids[evaluate_data_indices],
                 evaluate_data.dst_node_ids[evaluate_data_indices],
                 evaluate_data.node_interact_times[evaluate_data_indices],
                 evaluate_data.edge_ids[evaluate_data_indices],
+                evaluate_data.pattern_ids[evaluate_data_indices],
             )
 
             # Retrieve ground-truth labels for the actual links
@@ -108,6 +110,7 @@ def evaluate_model_link_prediction(
                     src_node_ids=batch_src_node_ids,
                     dst_node_ids=batch_dst_node_ids,
                     node_interact_times=batch_node_interact_times,
+                    node_pattern_ids=batch_pattern_ids,
                     num_neighbors=num_neighbors,
                 )
 
@@ -119,6 +122,7 @@ def evaluate_model_link_prediction(
                     src_node_ids=batch_neg_src_node_ids,
                     dst_node_ids=batch_neg_dst_node_ids,
                     node_interact_times=batch_node_interact_times,
+                    node_pattern_ids=batch_pattern_ids,
                     num_neighbors=num_neighbors,
                 )
             elif model_name in ["GraphMixer"]:
@@ -130,6 +134,7 @@ def evaluate_model_link_prediction(
                     src_node_ids=batch_src_node_ids,
                     dst_node_ids=batch_dst_node_ids,
                     node_interact_times=batch_node_interact_times,
+                    node_pattern_ids=batch_pattern_ids,
                     num_neighbors=num_neighbors,
                     time_gap=time_gap,
                 )
@@ -142,6 +147,7 @@ def evaluate_model_link_prediction(
                     src_node_ids=batch_neg_src_node_ids,
                     dst_node_ids=batch_neg_dst_node_ids,
                     node_interact_times=batch_node_interact_times,
+                    node_pattern_ids=batch_pattern_ids,
                     num_neighbors=num_neighbors,
                     time_gap=time_gap,
                 )
@@ -154,6 +160,7 @@ def evaluate_model_link_prediction(
                     src_node_ids=batch_src_node_ids,
                     dst_node_ids=batch_dst_node_ids,
                     node_interact_times=batch_node_interact_times,
+                    node_pattern_ids=batch_pattern_ids,
                 )
 
                 # get temporal embedding of negative source and negative destination nodes
@@ -164,6 +171,7 @@ def evaluate_model_link_prediction(
                     src_node_ids=batch_neg_src_node_ids,
                     dst_node_ids=batch_neg_dst_node_ids,
                     node_interact_times=batch_node_interact_times,
+                    node_pattern_ids=batch_pattern_ids,
                 )
 
             elif model_name in ["JODIE", "DyRep", "TGN"]:
@@ -177,6 +185,7 @@ def evaluate_model_link_prediction(
                     src_node_ids=batch_neg_src_node_ids,
                     dst_node_ids=batch_neg_dst_node_ids,
                     node_interact_times=batch_node_interact_times,
+                    pattern_ids=batch_pattern_ids,
                     edge_ids=None,
                     edges_are_positive=False,
                     num_neighbors=num_neighbors,
@@ -427,6 +436,7 @@ def evaluate_model_link_prediction_ano_insertion(
                     src_node_ids=batch_neg_src_node_ids,
                     dst_node_ids=batch_neg_dst_node_ids,
                     node_interact_times=batch_neg_node_interact_times,
+                    node_pattern_ids=batch_neg_pattern_ids,
                     num_neighbors=num_neighbors,
                 )
             elif model_name in ["GraphMixer"]:
@@ -451,6 +461,7 @@ def evaluate_model_link_prediction_ano_insertion(
                     src_node_ids=batch_neg_src_node_ids,
                     dst_node_ids=batch_neg_dst_node_ids,
                     node_interact_times=batch_neg_node_interact_times,
+                    node_pattern_ids=batch_neg_pattern_ids,
                     num_neighbors=num_neighbors,
                     time_gap=time_gap,
                 )
@@ -474,6 +485,7 @@ def evaluate_model_link_prediction_ano_insertion(
                     src_node_ids=batch_neg_src_node_ids,
                     dst_node_ids=batch_neg_dst_node_ids,
                     node_interact_times=batch_neg_node_interact_times,
+                    node_pattern_ids=batch_neg_pattern_ids,
                 )
 
             elif model_name in ["JODIE", "DyRep", "TGN"]:
@@ -501,6 +513,7 @@ def evaluate_model_link_prediction_ano_insertion(
                     src_node_ids=batch_src_node_ids,
                     dst_node_ids=batch_dst_node_ids,
                     node_interact_times=batch_node_interact_times,
+                    node_pattern_ids=batch_neg_pattern_ids,
                     edge_ids=batch_edge_ids,
                     edges_are_positive=True,
                     num_neighbors=num_neighbors,

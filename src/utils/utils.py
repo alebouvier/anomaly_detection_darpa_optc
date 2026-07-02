@@ -844,6 +844,36 @@ class NeighborSampler:
         if self.seed is not None:
             self.random_state = np.random.RandomState(self.seed)
 
+    def _filter_neighbors_by_pattern(
+        self,
+        node_neighbor_ids: np.ndarray,
+        node_edge_ids: np.ndarray,
+        node_neighbor_times: np.ndarray,
+        node_neighbor_pattern_ids: np.ndarray,
+        node_pattern_id: int,
+    ):
+        """Apply optional pattern-based masking without allocating extra arrays when disabled."""
+        if not self.pattern_masking:
+            return node_neighbor_ids, node_edge_ids, node_neighbor_times, node_neighbor_pattern_ids
+
+        if self.pattern_masking == "all":
+            if node_pattern_id != 0:
+                return node_neighbor_ids, node_edge_ids, node_neighbor_times, node_neighbor_pattern_ids
+            mask = node_neighbor_pattern_ids == 0
+        elif self.pattern_masking == "specific":
+            mask = (node_neighbor_pattern_ids == 0) | (
+                node_neighbor_pattern_ids == node_pattern_id
+            )
+        else:
+            return node_neighbor_ids, node_edge_ids, node_neighbor_times, node_neighbor_pattern_ids
+
+        return (
+            node_neighbor_ids[mask],
+            node_edge_ids[mask],
+            node_neighbor_times[mask],
+            node_neighbor_pattern_ids[mask],
+        )
+
     def compute_sampled_probabilities(self, node_neighbor_times: np.ndarray):
         """
         compute the sampled probabilities of historical neighbors based on their interaction times
@@ -959,18 +989,19 @@ class NeighborSampler:
             )
 
             if self.pattern_masking == "all" and node_pattern_id == 0:
-                # all: normal data cannot see negative patterns, negative patterns can see normal data and other negative patterns
-                mask = (node_neighbor_pattern_ids == 0)
+                mask = node_neighbor_pattern_ids == 0
+                node_neighbor_ids = node_neighbor_ids[mask]
+                node_edge_ids = node_edge_ids[mask]
+                node_neighbor_times = node_neighbor_times[mask]
+                node_neighbor_pattern_ids = node_neighbor_pattern_ids[mask]
             elif self.pattern_masking == "specific":
-                # specific: normal data cannot see negative patterns, negative patterns can see normal data and  not the other negative patterns
-                mask = (node_neighbor_pattern_ids == 0) | (node_neighbor_pattern_ids == node_pattern_id)
-            else:
-                mask = np.full(len(node_neighbor_ids), True)
-            
-            node_neighbor_ids = node_neighbor_ids[mask]
-            node_edge_ids = node_edge_ids[mask] 
-            node_neighbor_times = node_neighbor_times[mask]
-            node_neighbor_pattern_ids = node_neighbor_pattern_ids[mask]
+                mask = (node_neighbor_pattern_ids == 0) | (
+                    node_neighbor_pattern_ids == node_pattern_id
+                )
+                node_neighbor_ids = node_neighbor_ids[mask]
+                node_edge_ids = node_edge_ids[mask]
+                node_neighbor_times = node_neighbor_times[mask]
+                node_neighbor_pattern_ids = node_neighbor_pattern_ids[mask]
 
             if len(node_neighbor_ids) > 0:
                 if self.sample_neighbor_strategy in ["uniform", "time_interval_aware"]:
@@ -1114,6 +1145,7 @@ class NeighborSampler:
             [],
             [],
             [],
+            [],
         )
         # get the temporal neighbors at the first hop
         for idx, (node_id, node_interact_time, node_pattern_id) in enumerate(
@@ -1129,18 +1161,19 @@ class NeighborSampler:
             )
 
             if self.pattern_masking == "all" and node_pattern_id == 0:
-                # all: normal data cannot see negative patterns, negative patterns can see normal data and other negative patterns
-                mask = (node_neighbor_pattern_ids == 0)
+                mask = node_neighbor_pattern_ids == 0
+                node_neighbor_ids = node_neighbor_ids[mask]
+                node_edge_ids = node_edge_ids[mask]
+                node_neighbor_times = node_neighbor_times[mask]
+                node_neighbor_pattern_ids = node_neighbor_pattern_ids[mask]
             elif self.pattern_masking == "specific":
-                # specific: normal data cannot see negative patterns, negative patterns can see normal data and  not the other negative patterns
-                mask = (node_neighbor_pattern_ids == 0) | (node_neighbor_pattern_ids == node_pattern_id)
-            else:
-                mask = np.ones(len(node_neighbor_pattern_ids))
-            
-            node_neighbor_ids = node_neighbor_ids[mask]
-            node_edge_ids = node_edge_ids[mask] 
-            node_neighbor_times = node_neighbor_times[mask]
-            node_neighbor_pattern_ids = node_neighbor_pattern_ids[mask]
+                mask = (node_neighbor_pattern_ids == 0) | (
+                    node_neighbor_pattern_ids == node_pattern_id
+                )
+                node_neighbor_ids = node_neighbor_ids[mask]
+                node_edge_ids = node_edge_ids[mask]
+                node_neighbor_times = node_neighbor_times[mask]
+                node_neighbor_pattern_ids = node_neighbor_pattern_ids[mask]
 
             nodes_neighbor_ids_list.append(node_neighbor_ids)
             nodes_edge_ids_list.append(node_edge_ids)

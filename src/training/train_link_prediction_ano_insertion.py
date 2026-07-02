@@ -26,7 +26,7 @@ from utils.utils import (
     create_folder,
 )
 from utils.utils import get_neighbor_sampler, NegativeEdgeSampler, BASE
-from evaluation.evaluate_models_utils import evaluate_model_link_prediction
+from evaluation.evaluate_models_utils import evaluate_model_link_prediction, evaluate_model_link_prediction_ano_insertion
 from utils.metrics import get_link_prediction_metrics
 from utils.DataLoader import get_idx_data_loader, get_link_prediction_data
 from utils.EarlyStopping import EarlyStopping
@@ -560,7 +560,7 @@ def main(args):
             epoch_train_loss = np.mean(train_losses)
             train_loss_history.append(epoch_train_loss)
 
-            val_losses, val_metrics, val_batch_losses = evaluate_model_link_prediction(
+            val_losses, val_metrics, val_batch_losses = evaluate_model_link_prediction_ano_insertion(
                 model_name=args.model_name,
                 model=model,
                 neighbor_sampler=full_neighbor_sampler,

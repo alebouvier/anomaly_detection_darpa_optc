@@ -168,7 +168,7 @@ class TGAT(nn.Module):
             neighbor_node_conv_features = self.compute_node_temporal_embeddings(
                 node_ids=neighbor_node_ids.flatten(),
                 node_interact_times=neighbor_times.flatten(),
-                node_pattern_ids=node_pattern_ids.flatten(),
+                node_pattern_ids=neighbor_pattern_ids.flatten(),
                 current_layer_num=current_layer_num - 1,
                 num_neighbors=num_neighbors,
             )
