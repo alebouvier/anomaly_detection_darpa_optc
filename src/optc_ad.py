@@ -16,6 +16,18 @@ from evaluation.evaluate_link_prediction_ano_insertion import main as validate_l
 from evaluation.evaluate_anomaly_ts import main as testing_anomaly_detection
 from preprocessing.two_hop_non_neighbors import main as compute_2hop_non_neighbors
 
+import os
+import signal
+import sys
+
+from utils.profiler import (
+    enable_profiling,
+    save_and_exit,
+    save_profile,
+    start_periodic_saver,
+    update_profile_context,
+)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build graphs from json files.")
@@ -95,69 +107,74 @@ if __name__ == "__main__":
 
         cfg_dataset = open_config(dataset)
 
+        update_profile_context(args.task, clients)
+        enable_profiling()
+        signal.signal(signal.SIGINT, save_and_exit)
+        signal.signal(signal.SIGTERM, save_and_exit)
+        start_periodic_saver(600)
+
         task = args.task
-        if task == "log_analysis":
-            analyse_log(clients, logs, dataset, start_val, start_test)
+        try:
+            if task == "log_analysis":
+                analyse_log(clients, logs, dataset, start_val, start_test)
 
-        elif task == "temporal_pattern":
-            temporal_patterns(clients, start_val, start_test)
+            elif task == "temporal_pattern":
+                temporal_patterns(clients, start_val, start_test)
 
-        elif task == "preprocessing":
-            test_preproc(logs, dataset, clients)
-        
-        elif task == "two_hop_non_neighbors":
-            compute_2hop_non_neighbors(dataset, clients)
-        
-        elif task == "train_w2v":
-            training_w2v(clients, data=dataset)
-        
-        elif task == "train_bert128":
-            train_bert128(clients, data=dataset)
-            
-        elif task == "feature_w2v":  
-            extract_features(dataset, clients, model_type="w2v")
+            elif task == "preprocessing":
+                test_preproc(logs, dataset, clients)
 
-        elif task == "feature_bert":  
-            extract_features(dataset, clients, model_type="bert")
+            elif task == "two_hop_non_neighbors":
+                compute_2hop_non_neighbors(dataset, clients)
 
+            elif task == "train_w2v":
+                training_w2v(clients, data=dataset)
 
-        elif task == "train_link_prediction":
-            train_link_prediction_args = get_link_prediction_args(is_evaluation=False)
-            for client in clients:
-                train_link_prediction_args.dataset_name = f"optc_{client}"
-                training_link_prediction(train_link_prediction_args)
-        
-        elif task == "train_link_prediction_ano_insertion":
-            train_link_prediction_args = get_link_prediction_args(is_evaluation=False)
-            for client in clients:
-                train_link_prediction_args.dataset_name = f"optc_{client}"
-                training_link_prediction_check(train_link_prediction_args)
+            elif task == "train_bert128":
+                train_bert128(clients, data=dataset)
 
+            elif task == "feature_w2v":
+                extract_features(dataset, clients, model_type="w2v")
 
-        elif task == "validate_link_prediction":
-            validation_link_prediction_args = get_link_prediction_args(
-                is_evaluation=True
-            )
-            for client in clients:
-                validation_link_prediction_args.dataset_name = f"optc_{client}"
-                validate_link_prediction(validation_link_prediction_args)
+            elif task == "feature_bert":
+                extract_features(dataset, clients, model_type="bert")
 
-        elif task == "validate_link_prediction_ano_insertion":
-            validation_link_prediction_args = get_link_prediction_args(
-                is_evaluation=True
-            )
-            for client in clients:
-                validation_link_prediction_args.dataset_name = f"optc_{client}"
-                validate_link_prediction_check(validation_link_prediction_args)
+            elif task == "train_link_prediction":
+                train_link_prediction_args = get_link_prediction_args(is_evaluation=False)
+                for client in clients:
+                    train_link_prediction_args.dataset_name = f"optc_{client}"
+                    training_link_prediction(train_link_prediction_args)
 
-        elif task == "test_anomaly_detection":
-            test_anomaly_detection_args = get_link_prediction_args(is_evaluation=True)
-            for client in clients:
-                test_anomaly_detection_args.dataset_name = f"optc_{client}"
-                testing_anomaly_detection(test_anomaly_detection_args)
+            elif task == "train_link_prediction_ano_insertion":
+                train_link_prediction_args = get_link_prediction_args(is_evaluation=False)
+                for client in clients:
+                    train_link_prediction_args.dataset_name = f"optc_{client}"
+                    training_link_prediction_check(train_link_prediction_args)
 
+            elif task == "validate_link_prediction":
+                validation_link_prediction_args = get_link_prediction_args(
+                    is_evaluation=True
+                )
+                for client in clients:
+                    validation_link_prediction_args.dataset_name = f"optc_{client}"
+                    validate_link_prediction(validation_link_prediction_args)
 
+            elif task == "validate_link_prediction_ano_insertion":
+                validation_link_prediction_args = get_link_prediction_args(
+                    is_evaluation=True
+                )
+                for client in clients:
+                    validation_link_prediction_args.dataset_name = f"optc_{client}"
+                    validate_link_prediction_check(validation_link_prediction_args)
 
+            elif task == "test_anomaly_detection":
+                test_anomaly_detection_args = get_link_prediction_args(is_evaluation=True)
+                for client in clients:
+                    test_anomaly_detection_args.dataset_name = f"optc_{client}"
+                    testing_anomaly_detection(test_anomaly_detection_args)
+
+        finally:
+            save_profile()
 
     except Exception as e:
         print(f"Error {e}")
