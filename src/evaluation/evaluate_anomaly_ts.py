@@ -497,6 +497,6 @@ def main(args):
 
     anomaly_detection_graph_level_metrics(test_predicted_links, test_actual_links, test_non_exist_links, None, names=(args.dataset_name, args.model_name))
 
-    check_weird_predictions(val_predicted_links, val_actual_links, val_non_exist_links, names=(args.dataset_name, args.model_name), output_file="weird_predictions_val.txt")
-    check_weird_predictions(test_predicted_links, test_actual_links, test_non_exist_links, names=(args.dataset_name, args.model_name), output_file="weird_predictions_test.txt")
+    # check_weird_predictions(val_predicted_links, val_actual_links, val_non_exist_links, names=(args.dataset_name, args.model_name), output_file="weird_predictions_val.txt")
+    # check_weird_predictions(test_predicted_links, test_actual_links, test_non_exist_links, names=(args.dataset_name, args.model_name), output_file="weird_predictions_test.txt")
 

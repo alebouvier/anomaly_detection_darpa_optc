@@ -133,7 +133,7 @@ def get_link_prediction_args(is_evaluation: bool = False):
     parser.add_argument(
         "--max_input_sequence_length",
         type=int,
-        default=32,
+        default=8,
         help="maximal length of the input sequence of each node",
     )
     parser.add_argument(

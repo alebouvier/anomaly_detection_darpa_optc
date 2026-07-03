@@ -348,27 +348,29 @@ def main(args):
 
                 neg_edge_sample_size = max(0, len(batch_src_node_ids) - len(batch_ano_src_node_ids))
 
-                if neg_edge_sample_size > 0:
-                    _, batch_neg_dst_node_ids, num_preferred_sample_edges, num_random_sample_edges = (
-                        train_neg_edge_sampler.sample(
-                            size=neg_edge_sample_size,
-                            batch_src_node_ids=batch_src_node_ids,
-                            batch_dst_node_ids=batch_dst_node_ids,
-                            current_batch_start_time=float(np.min(batch_node_interact_times)),
-                            current_batch_end_time=float(np.max(batch_node_interact_times)),
-                            return_sampling_counts=True,
-                        )
-                    )
-                    batch_neg_src_node_ids = batch_src_node_ids[:neg_edge_sample_size]
-                    batch_neg_labels = np.zeros(neg_edge_sample_size)
-                    batch_neg_pattern_ids = np.zeros(neg_edge_sample_size)
-                else:
-                    batch_neg_src_node_ids = np.array([], dtype=np.int64)
-                    batch_neg_dst_node_ids = np.array([], dtype=np.int64)
-                    batch_neg_labels = np.array([], dtype=np.int64)
-                    batch_neg_pattern_ids = np.array([], dtype=np.int64)
-                    num_preferred_sample_edges = 0
-                    num_random_sample_edges = 0
+                # if neg_edge_sample_size > 0:
+                #     _, batch_neg_dst_node_ids, num_preferred_sample_edges, num_random_sample_edges = (
+                #         train_neg_edge_sampler.sample(
+                #             size=neg_edge_sample_size,
+                #             batch_src_node_ids=batch_src_node_ids,
+                #             batch_dst_node_ids=batch_dst_node_ids,
+                #             current_batch_start_time=float(np.min(batch_node_interact_times)),
+                #             current_batch_end_time=float(np.max(batch_node_interact_times)),
+                #             return_sampling_counts=True,
+                #         )
+                #     )
+                #     batch_neg_src_node_ids = batch_src_node_ids[:neg_edge_sample_size]
+                #     batch_neg_labels = np.zeros(neg_edge_sample_size)
+                #     batch_neg_pattern_ids = np.zeros(neg_edge_sample_size)
+                #     batch_neg_node_interact_times = batch_node_interact_times[:neg_edge_sample_size]
+                # else:
+                batch_neg_src_node_ids = np.array([], dtype=np.int64)
+                batch_neg_dst_node_ids = np.array([], dtype=np.int64)
+                batch_neg_labels = np.array([], dtype=np.int64)
+                batch_neg_pattern_ids = np.array([], dtype=np.int64)
+                batch_neg_node_interact_times = np.array([], dtype=np.float32)
+                num_preferred_sample_edges = 0
+                num_random_sample_edges = 0
 
                 nb_normal_edges_sampled += len(batch_src_node_ids)
                 nb_anomalous_edges_sampled += len(batch_ano_src_node_ids)
@@ -378,11 +380,10 @@ def main(args):
                 if len(batch_ano_src_node_ids) > 0:
                     batch_neg_src_node_ids = np.concatenate([batch_neg_src_node_ids, batch_ano_src_node_ids])
                     batch_neg_dst_node_ids = np.concatenate([batch_neg_dst_node_ids, batch_ano_dst_node_ids])
-                    batch_neg_node_interact_times = np.concatenate([batch_node_interact_times[:neg_edge_sample_size], batch_ano_node_interact_times])
+                    batch_neg_node_interact_times = np.concatenate([batch_neg_node_interact_times, batch_ano_node_interact_times])
                     batch_neg_labels = np.concatenate([batch_neg_labels, batch_ano_labels])
                     batch_neg_pattern_ids = np.concatenate([batch_neg_pattern_ids, batch_ano_pattern_ids])
-                else:
-                    batch_neg_node_interact_times = batch_node_interact_times
+
 
 
                 if args.negative_sample_strategy == "historical":

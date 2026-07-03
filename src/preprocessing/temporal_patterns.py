@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+from preprocessing.extract_all_anomaly import add_anomaly_whole_in_train_val, extract_whole_anomaly
+
 try:
     from utils.utils import period, round_duration, save_pkl, open_config, BASE
 except ModuleNotFoundError:  # pragma: no cover - fallback for repo-root execution
@@ -1001,8 +1003,8 @@ def main(clients, start_val, start_test):
         # get_anomaly_connected_components(client)
         # results = temporal_metapath_mining(client, start_val, start_test)
         # results.to_csv(f"{BASE}/processed_data/optc_{client}/metapath.csv", index=False)
-        anomaly_frames = extract_anomalies_from_test_data(client, start_test, window_minutes=15, step_minutes=15)
-        anomaly_frames.to_csv(f"{BASE}/processed_data/optc_{client}/anomaly_frames.csv", index=False)
-        edge_list, edge_features = add_anomaly_frames_in_train_val(anomaly_frames, client, start_val, start_test)
+        anomalies = extract_whole_anomaly(client, start_test)
+        anomalies.to_csv(f"{BASE}/processed_data/optc_{client}/anomalies.csv", index=False)
+        edge_list, edge_features = add_anomaly_whole_in_train_val(anomalies, client, start_val, start_test)
         edge_list.to_csv(f"{BASE}/processed_data/optc_{client}/ml_optc_{client}.csv", index=False)
         edge_features.to_csv(f"{BASE}/processed_data/optc_{client}/edge_features.csv", index=False)

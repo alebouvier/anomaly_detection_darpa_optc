@@ -779,6 +779,243 @@ def create_optimizer(
 
 
 class NeighborSampler:
+    """
+    Same public behavior as NeighborSamplerCurrent, but candidate indices for
+    pattern masking are precomputed ONCE per node at init time (as sorted arrays
+    of positions into the node's time-sorted neighbor list), instead of being
+    recomputed via a fresh boolean mask + fancy-index allocation on every single
+    query. At query time we only need a binary search (np.searchsorted) to find
+    how many of those precomputed candidates fall before the row's time cutoff,
+    then a single slice + gather.
+ 
+    This turns the per-row masking cost from O(i) (i = truncated history length,
+    which can be huge for hub nodes) into O(log k) (k = number of pattern-0 /
+    pattern-matching neighbors for that node), independent of how much history a
+    hub node has accumulated.
+    """
+ 
+    def __init__(self, adj_list, sample_neighbor_strategy="uniform", time_scaling_factor=0.0,
+                 seed=None, pattern_masking=None):
+        self.sample_neighbor_strategy = sample_neighbor_strategy
+        self.seed = seed
+        self.pattern_masking = pattern_masking
+ 
+        self.nodes_neighbor_ids = []
+        self.nodes_edge_ids = []
+        self.nodes_neighbor_times = []
+        self.nodes_neighbor_labels = []
+        self.nodes_neighbor_pattern_ids = []
+        # precomputed sorted-ascending index arrays, one entry per node:
+        #   "all":      (indices_where_pattern==0,)   -- only needed when query pattern_id==0
+        #   "specific": {pattern_id: indices_where_pattern in {0, pattern_id}, ...}
+        self.nodes_candidate_indices = []
+ 
+        if self.sample_neighbor_strategy == "time_interval_aware":
+            self.nodes_neighbor_sampled_probabilities = []
+            self.time_scaling_factor = time_scaling_factor
+ 
+        for node_idx, per_node_neighbors in enumerate(adj_list):
+            sorted_per_node_neighbors = sorted(per_node_neighbors, key=lambda x: x[2])
+            self.nodes_neighbor_ids.append(np.array([x[0] for x in sorted_per_node_neighbors]))
+            self.nodes_edge_ids.append(np.array([x[1] for x in sorted_per_node_neighbors]))
+            self.nodes_neighbor_times.append(np.array([x[2] for x in sorted_per_node_neighbors]))
+            self.nodes_neighbor_labels.append(np.array([x[3] for x in sorted_per_node_neighbors]))
+            node_neighbor_pattern_ids = np.array([x[4] for x in sorted_per_node_neighbors])
+            self.nodes_neighbor_pattern_ids.append(node_neighbor_pattern_ids)
+ 
+            if self.pattern_masking == "all":
+                # np.flatnonzero on the time-sorted array is itself ascending,
+                # so this is safe to binary-search into later.
+                self.nodes_candidate_indices.append(np.flatnonzero(node_neighbor_pattern_ids == 0))
+            elif self.pattern_masking == "specific":
+                candidate_by_pattern = {0: np.flatnonzero(node_neighbor_pattern_ids == 0)}
+                for pattern_id in np.unique(node_neighbor_pattern_ids):
+                    pattern_id = int(pattern_id)
+                    if pattern_id == 0:
+                        continue
+                    candidate_by_pattern[pattern_id] = np.flatnonzero(
+                        (node_neighbor_pattern_ids == 0) | (node_neighbor_pattern_ids == pattern_id))
+                self.nodes_candidate_indices.append(candidate_by_pattern)
+            else:
+                self.nodes_candidate_indices.append(None)
+ 
+            if self.sample_neighbor_strategy == "time_interval_aware":
+                self.nodes_neighbor_sampled_probabilities.append(
+                    self.compute_sampled_probabilities(np.array([x[2] for x in sorted_per_node_neighbors])))
+ 
+        if self.seed is not None:
+            self.random_state = np.random.RandomState(self.seed)
+ 
+    def compute_sampled_probabilities(self, node_neighbor_times):
+        if len(node_neighbor_times) == 0:
+            return np.array([])
+        node_neighbor_times = node_neighbor_times - np.max(node_neighbor_times)
+        exp_node_neighbor_times = np.exp(self.time_scaling_factor * node_neighbor_times)
+        sampled_probabilities = exp_node_neighbor_times / np.cumsum(exp_node_neighbor_times)
+        sampled_probabilities[np.isnan(sampled_probabilities)] = -1e10
+        return sampled_probabilities
+ 
+    def find_neighbors_before(self, node_id, interact_time, return_sampled_probabilities=False):
+        i = np.searchsorted(self.nodes_neighbor_times[node_id], interact_time)
+        if return_sampled_probabilities:
+            return (i, self.nodes_neighbor_sampled_probabilities[node_id][:i])
+        return (i, None)
+ 
+    def _candidate_indices_up_to(self, node_id, node_pattern_id, cutoff):
+        """
+        Return the (index_array_into_full_node_arrays, up_to_local_cutoff) for this
+        node/pattern given the time cutoff `cutoff` (= number of neighbors with
+        time < interact_time). Returns None to mean "use [:cutoff] directly, no
+        masking needed".
+        """
+        if not self.pattern_masking or self.pattern_masking == "no":
+            return None
+ 
+        if self.pattern_masking == "all":
+            if node_pattern_id != 0:
+                return None  # unfiltered, use [:cutoff] directly
+            pool = self.nodes_candidate_indices[node_id]
+        else:  # "specific"
+            pool = self.nodes_candidate_indices[node_id].get(
+                int(node_pattern_id), self.nodes_candidate_indices[node_id][0])
+ 
+        local_cutoff = np.searchsorted(pool, cutoff)
+        return pool[:local_cutoff]
+ 
+    def get_historical_neighbors(self, node_ids, node_interact_times, node_pattern_ids=None, num_neighbors=20):
+        assert num_neighbors > 0
+        nodes_neighbor_ids = np.zeros((len(node_ids), num_neighbors)).astype(np.longlong)
+        nodes_edge_ids = np.zeros((len(node_ids), num_neighbors)).astype(np.longlong)
+        nodes_neighbor_times = np.zeros((len(node_ids), num_neighbors)).astype(np.float32)
+        nodes_neighbor_pattern_ids = np.zeros((len(node_ids), num_neighbors)).astype(np.float32)
+ 
+        if node_pattern_ids is None:
+            node_pattern_ids = np.zeros(len(node_ids))
+ 
+        for idx, (node_id, node_interact_time, node_pattern_id) in enumerate(
+                zip(node_ids, node_interact_times, node_pattern_ids)):
+            cutoff, node_neighbor_sampled_probabilities = self.find_neighbors_before(
+                node_id=node_id, interact_time=node_interact_time,
+                return_sampled_probabilities=self.sample_neighbor_strategy == "time_interval_aware")
+ 
+            candidate_indices = self._candidate_indices_up_to(node_id, node_pattern_id, cutoff)
+ 
+            full_neighbor_ids = self.nodes_neighbor_ids[node_id]
+            full_edge_ids = self.nodes_edge_ids[node_id]
+            full_times = self.nodes_neighbor_times[node_id]
+            full_patterns = self.nodes_neighbor_pattern_ids[node_id]
+ 
+            if candidate_indices is None:
+                node_neighbor_ids = full_neighbor_ids[:cutoff]
+                node_edge_ids = full_edge_ids[:cutoff]
+                node_neighbor_times = full_times[:cutoff]
+                node_neighbor_pattern_ids_ = full_patterns[:cutoff]
+                # for time_interval_aware, probabilities already sliced to [:cutoff] by find_neighbors_before
+            else:
+                node_neighbor_ids = full_neighbor_ids[candidate_indices]
+                node_edge_ids = full_edge_ids[candidate_indices]
+                node_neighbor_times = full_times[candidate_indices]
+                node_neighbor_pattern_ids_ = full_patterns[candidate_indices]
+                if node_neighbor_sampled_probabilities is not None:
+                    node_neighbor_sampled_probabilities = node_neighbor_sampled_probabilities[candidate_indices]
+ 
+            if len(node_neighbor_ids) > 0:
+                if self.sample_neighbor_strategy in ["uniform", "time_interval_aware"]:
+                    if node_neighbor_sampled_probabilities is not None:
+                        node_neighbor_sampled_probabilities = torch.softmax(
+                            torch.from_numpy(node_neighbor_sampled_probabilities).float(), dim=0).numpy()
+                    if self.seed is None:
+                        sampled_indices = np.random.choice(a=len(node_neighbor_ids), size=num_neighbors,
+                                                             p=node_neighbor_sampled_probabilities)
+                    else:
+                        sampled_indices = self.random_state.choice(a=len(node_neighbor_ids), size=num_neighbors,
+                                                                     p=node_neighbor_sampled_probabilities)
+ 
+                    nodes_neighbor_ids[idx, :] = node_neighbor_ids[sampled_indices]
+                    nodes_edge_ids[idx, :] = node_edge_ids[sampled_indices]
+                    nodes_neighbor_times[idx, :] = node_neighbor_times[sampled_indices]
+                    nodes_neighbor_pattern_ids[idx, :] = node_neighbor_pattern_ids_[sampled_indices]
+ 
+                    sorted_position = nodes_neighbor_times[idx, :].argsort()
+                    nodes_neighbor_ids[idx, :] = nodes_neighbor_ids[idx, :][sorted_position]
+                    nodes_edge_ids[idx, :] = nodes_edge_ids[idx, :][sorted_position]
+                    nodes_neighbor_times[idx, :] = nodes_neighbor_times[idx, :][sorted_position]
+                    nodes_neighbor_pattern_ids[idx, :] = nodes_neighbor_pattern_ids[idx, :][sorted_position]
+                elif self.sample_neighbor_strategy == "recent":
+                    node_neighbor_ids = node_neighbor_ids[-num_neighbors:]
+                    node_edge_ids = node_edge_ids[-num_neighbors:]
+                    node_neighbor_times = node_neighbor_times[-num_neighbors:]
+                    node_neighbor_pattern_ids_ = node_neighbor_pattern_ids_[-num_neighbors:]
+ 
+                    nodes_neighbor_ids[idx, num_neighbors - len(node_neighbor_ids):] = node_neighbor_ids
+                    nodes_edge_ids[idx, num_neighbors - len(node_edge_ids):] = node_edge_ids
+                    nodes_neighbor_times[idx, num_neighbors - len(node_neighbor_times):] = node_neighbor_times
+                    nodes_neighbor_pattern_ids[idx, num_neighbors - len(node_neighbor_times):] = node_neighbor_pattern_ids_
+                else:
+                    raise ValueError(f"Not implemented error for sample_neighbor_strategy {self.sample_neighbor_strategy}!")
+ 
+        return nodes_neighbor_ids, nodes_edge_ids, nodes_neighbor_times, nodes_neighbor_pattern_ids
+ 
+    def get_multi_hop_neighbors(self, num_hops, node_ids, node_interact_times, node_pattern_ids=None, num_neighbors=20):
+        assert num_hops > 0
+        nodes_neighbor_ids, nodes_edge_ids, nodes_neighbor_times, nodes_neighbor_pattern_ids = (
+            self.get_historical_neighbors(node_ids=node_ids, node_interact_times=node_interact_times,
+                                           node_pattern_ids=node_pattern_ids, num_neighbors=num_neighbors))
+        nodes_neighbor_ids_list = [nodes_neighbor_ids]
+        nodes_edge_ids_list = [nodes_edge_ids]
+        nodes_neighbor_times_list = [nodes_neighbor_times]
+        nodes_neighbor_pattern_ids_list = [nodes_neighbor_pattern_ids]
+        for hop in range(1, num_hops):
+            nodes_neighbor_ids, nodes_edge_ids, nodes_neighbor_times, nodes_neighbor_pattern_ids = (
+                self.get_historical_neighbors(node_ids=nodes_neighbor_ids_list[-1].flatten(),
+                                               node_interact_times=nodes_neighbor_times_list[-1].flatten(),
+                                               node_pattern_ids=nodes_neighbor_pattern_ids_list[-1].flatten(),
+                                               num_neighbors=num_neighbors))
+            nodes_neighbor_ids = nodes_neighbor_ids.reshape(len(node_ids), -1)
+            nodes_edge_ids = nodes_edge_ids.reshape(len(node_ids), -1)
+            nodes_neighbor_times = nodes_neighbor_times.reshape(len(node_ids), -1)
+            nodes_neighbor_pattern_ids = nodes_neighbor_pattern_ids.reshape(len(node_ids), -1)
+ 
+            nodes_neighbor_ids_list.append(nodes_neighbor_ids)
+            nodes_edge_ids_list.append(nodes_edge_ids)
+            nodes_neighbor_times_list.append(nodes_neighbor_times)
+            nodes_neighbor_pattern_ids_list.append(nodes_neighbor_pattern_ids)
+ 
+        return nodes_neighbor_ids_list, nodes_edge_ids_list, nodes_neighbor_times_list, nodes_neighbor_pattern_ids_list
+ 
+    def get_all_first_hop_neighbors(self, node_ids, node_interact_times, node_pattern_ids=None):
+        nodes_neighbor_ids_list, nodes_edge_ids_list, nodes_neighbor_times_list, nodes_neighbor_pattern_ids_list = [], [], [], []
+        if node_pattern_ids is None:
+            node_pattern_ids = np.zeros(len(node_ids))
+        for idx, (node_id, node_interact_time, node_pattern_id) in enumerate(
+                zip(node_ids, node_interact_times, node_pattern_ids)):
+            cutoff, _ = self.find_neighbors_before(node_id=node_id, interact_time=node_interact_time,
+                                                    return_sampled_probabilities=False)
+            candidate_indices = self._candidate_indices_up_to(node_id, node_pattern_id, cutoff)
+ 
+            if candidate_indices is None:
+                node_neighbor_ids = self.nodes_neighbor_ids[node_id][:cutoff]
+                node_edge_ids = self.nodes_edge_ids[node_id][:cutoff]
+                node_neighbor_times = self.nodes_neighbor_times[node_id][:cutoff]
+                node_neighbor_pattern_ids = self.nodes_neighbor_pattern_ids[node_id][:cutoff]
+            else:
+                node_neighbor_ids = self.nodes_neighbor_ids[node_id][candidate_indices]
+                node_edge_ids = self.nodes_edge_ids[node_id][candidate_indices]
+                node_neighbor_times = self.nodes_neighbor_times[node_id][candidate_indices]
+                node_neighbor_pattern_ids = self.nodes_neighbor_pattern_ids[node_id][candidate_indices]
+ 
+            nodes_neighbor_ids_list.append(node_neighbor_ids)
+            nodes_edge_ids_list.append(node_edge_ids)
+            nodes_neighbor_times_list.append(node_neighbor_times)
+            nodes_neighbor_pattern_ids_list.append(node_neighbor_pattern_ids)
+ 
+        return nodes_neighbor_ids_list, nodes_edge_ids_list, nodes_neighbor_times_list, nodes_neighbor_pattern_ids_list
+ 
+    def reset_random_state(self):
+        self.random_state = np.random.RandomState(self.seed)
+ 
+
+class NeighborSamplerOld:
     def __init__(
         self,
         adj_list: list,
