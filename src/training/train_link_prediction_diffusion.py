@@ -69,7 +69,7 @@ def main(args):
     # TODO: create diffusion model
     in_feat_dim = 33
     out_feat_dim = 33
-    timesteps = 50
+    timesteps = 50 # number of timesteps for diffusion process
     y = in_feat_dim
     diffusion = Diffusion_Cond(in_feat_dim, out_feat_dim, timesteps, y).to(
         args.device

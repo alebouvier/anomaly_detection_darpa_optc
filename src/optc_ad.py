@@ -11,6 +11,7 @@ from features.extract_features import main as extract_features
 from features.train_bert128 import main as train_bert128
 from training.train_link_prediction import main as training_link_prediction
 from training.train_link_prediction_ano_insertion import main as training_link_prediction_check
+from training.train_link_prediction_diffusion import main as training_link_prediction_diffusion
 from evaluation.evaluate_link_prediction import main as validate_link_prediction
 from evaluation.evaluate_link_prediction_ano_insertion import main as validate_link_prediction_check
 from evaluation.evaluate_anomaly_ts import main as testing_anomaly_detection
@@ -132,6 +133,12 @@ if __name__ == "__main__":
             for client in clients:
                 train_link_prediction_args.dataset_name = f"optc_{client}"
                 training_link_prediction_check(train_link_prediction_args)
+        
+        elif task == "train_link_prediction_diffusion":
+            train_link_prediction_args = get_link_prediction_args(is_evaluation=False)
+            for client in clients:
+                train_link_prediction_args.dataset_name = f"optc_{client}"
+                training_link_prediction_diffusion(train_link_prediction_args)
 
 
         elif task == "validate_link_prediction":
