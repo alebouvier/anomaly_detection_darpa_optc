@@ -1,32 +1,16 @@
 # preprocessing/extract_all_anomaly.py
 
 ## Purpose
-Describe the purpose of this module and how it fits into the project.
+It contains functions to extract all the anomalous edges present in the test as a single temporal pattern and insert it in training data.
 
 ## Responsibilities
-- [ ] Summarize the main tasks handled by this file.
-- [ ] List the key functions, classes, or procedures defined here.
-- [ ] Explain any significant side effects or external interactions.
+- [ ] Extract all anomalous edges present in the test.
+- [ ] normalize all the command lines
+- [ ] insert multiple time the pattern in train data.
 
-## Inputs
-- [ ] Describe required inputs, parameters, or configuration values.
-- [ ] Note any expected file formats, data structures, or environment assumptions.
-
-## Outputs
-- [ ] Describe produced results, artifacts, or return values.
-- [ ] Mention any files written, metrics computed, or models trained.
-
-## Key Components
-### Functions / Classes
-- [ ] Name:
-  - Purpose:
-  - Inputs:
-  - Outputs:
 
 ### Important Workflow
-1. [ ] Step 1
-2. [ ] Step 2
-3. [ ] Step 3
+The functions are used in temporal_pattern.py
 
 ## Dependencies
 - [ ] List related modules or packages used by this file.

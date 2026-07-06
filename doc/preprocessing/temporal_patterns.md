@@ -1,37 +1,34 @@
 # preprocessing/temporal_patterns.py
 
 ## Purpose
-Describe the purpose of this module and how it fits into the project.
+Extract temporal pattern from anomalies present in the test and insert them in train data as negative samples.
+
 
 ## Responsibilities
-- [ ] Summarize the main tasks handled by this file.
-- [ ] List the key functions, classes, or procedures defined here.
-- [ ] Explain any significant side effects or external interactions.
+- [ ] extract anomaly patterns
+- [ ] normalize all command lines to make them more generic
+- [ ] modify csv files to incorporate patterns
+
 
 ## Inputs
-- [ ] Describe required inputs, parameters, or configuration values.
-- [ ] Note any expected file formats, data structures, or environment assumptions.
+- [ ] clients: a list of clients/machines
+- [ ] start_val: date of validation start
+- [ ] start_test: date of test start
 
 ## Outputs
-- [ ] Describe produced results, artifacts, or return values.
-- [ ] Mention any files written, metrics computed, or models trained.
+- Outputs are stored in {BASE}/processed_data/optc_{client}/
+- anomalies.csv : file conataining anomaly pattern
+- ml_optc_{client}.csv : file modified with anomaly patterns
+- edge_features.csv : file modified with anomaly patterns and normalized command lines.
 
 ## Key Components
-### Functions / Classes
-- [ ] Name:
-  - Purpose:
-  - Inputs:
-  - Outputs:
 
 ### Important Workflow
-1. [ ] Step 1
-2. [ ] Step 2
-3. [ ] Step 3
+- executed after preprocessing_data.py
 
 ## Dependencies
-- [ ] List related modules or packages used by this file.
-- [ ] Mention any configuration files or runtime assumptions.
+- utility package
+- preprocessing.extract_all_anomaly : implement one way of extracting and incorporating tempora patterns.
 
 ## Notes
-- [ ] Add implementation details, caveats, or TODOs here.
-- [ ] Include usage examples or links to related modules if needed.
+- [ ] Many different implementation of temporal patterns have been tested. Some function in the script may be unused or obsolete.
