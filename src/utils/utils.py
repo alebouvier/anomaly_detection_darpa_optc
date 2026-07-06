@@ -905,12 +905,75 @@ class NeighborSampler:
             full_times = self.nodes_neighbor_times[node_id]
             full_patterns = self.nodes_neighbor_pattern_ids[node_id]
  
+            # number of valid candidates available (without ever materializing them)
+            num_candidates = cutoff if candidate_indices is None else len(candidate_indices)
+ 
+            if num_candidates == 0:
+                continue
+ 
+            if self.sample_neighbor_strategy == "uniform":
+                # Fast path: unweighted sampling only needs a COUNT of candidates,
+                # not the candidates themselves. Draw num_neighbors positions in the
+                # small [0, num_candidates) space first (O(num_neighbors)), THEN
+                # resolve those few positions through candidate_indices (if masking)
+                # into positions in the full per-node arrays, and gather only those
+                # num_neighbors entries. This avoids ever allocating an
+                # O(num_candidates) intermediate — the part that scaled with how
+                # much history was visible.
+                if self.seed is None:
+                    sampled_local = np.random.randint(0, num_candidates, size=num_neighbors)
+                else:
+                    sampled_local = self.random_state.randint(0, num_candidates, size=num_neighbors)
+ 
+                sampled_positions = sampled_local if candidate_indices is None else candidate_indices[sampled_local]
+ 
+                sampled_neighbor_ids = full_neighbor_ids[sampled_positions]
+                sampled_edge_ids = full_edge_ids[sampled_positions]
+                sampled_neighbor_times = full_times[sampled_positions]
+                sampled_neighbor_pattern_ids = full_patterns[sampled_positions]
+ 
+                sorted_position = sampled_neighbor_times.argsort()
+                nodes_neighbor_ids[idx, :] = sampled_neighbor_ids[sorted_position]
+                nodes_edge_ids[idx, :] = sampled_edge_ids[sorted_position]
+                nodes_neighbor_times[idx, :] = sampled_neighbor_times[sorted_position]
+                nodes_neighbor_pattern_ids[idx, :] = sampled_neighbor_pattern_ids[sorted_position]
+                continue
+ 
+            if self.sample_neighbor_strategy == "recent":
+                # Fast path: 'recent' only ever needs the LAST num_neighbors
+                # candidate positions. Slice the tail of candidate_indices first
+                # (a cheap O(1) view/slice of the small pool array) and only THEN
+                # gather from the full per-node arrays -- touching O(num_neighbors)
+                # data regardless of how many candidates exist. Previously this
+                # sliced the tail AFTER gathering the entire candidate set from the
+                # full arrays, which cost O(num_candidates) -- exactly the part that
+                # grows as more history becomes visible over the course of
+                # validation, which is what you were seeing.
+                selected_count = min(num_neighbors, num_candidates)
+                if candidate_indices is None:
+                    selected_positions = np.arange(cutoff - selected_count, cutoff)
+                else:
+                    selected_positions = candidate_indices[-selected_count:]
+ 
+                selected_neighbor_ids = full_neighbor_ids[selected_positions]
+                selected_edge_ids = full_edge_ids[selected_positions]
+                selected_neighbor_times = full_times[selected_positions]
+                selected_neighbor_pattern_ids = full_patterns[selected_positions]
+ 
+                nodes_neighbor_ids[idx, num_neighbors - selected_count:] = selected_neighbor_ids
+                nodes_edge_ids[idx, num_neighbors - selected_count:] = selected_edge_ids
+                nodes_neighbor_times[idx, num_neighbors - selected_count:] = selected_neighbor_times
+                nodes_neighbor_pattern_ids[idx, num_neighbors - selected_count:] = selected_neighbor_pattern_ids
+                continue
+ 
+            # Slow path (weighted 'time_interval_aware' only): this genuinely needs
+            # the full probability vector over all candidates -- unavoidable for
+            # np.random.choice with p=...
             if candidate_indices is None:
                 node_neighbor_ids = full_neighbor_ids[:cutoff]
                 node_edge_ids = full_edge_ids[:cutoff]
                 node_neighbor_times = full_times[:cutoff]
                 node_neighbor_pattern_ids_ = full_patterns[:cutoff]
-                # for time_interval_aware, probabilities already sliced to [:cutoff] by find_neighbors_before
             else:
                 node_neighbor_ids = full_neighbor_ids[candidate_indices]
                 node_edge_ids = full_edge_ids[candidate_indices]
@@ -919,41 +982,27 @@ class NeighborSampler:
                 if node_neighbor_sampled_probabilities is not None:
                     node_neighbor_sampled_probabilities = node_neighbor_sampled_probabilities[candidate_indices]
  
-            if len(node_neighbor_ids) > 0:
-                if self.sample_neighbor_strategy in ["uniform", "time_interval_aware"]:
-                    if node_neighbor_sampled_probabilities is not None:
-                        node_neighbor_sampled_probabilities = torch.softmax(
-                            torch.from_numpy(node_neighbor_sampled_probabilities).float(), dim=0).numpy()
-                    if self.seed is None:
-                        sampled_indices = np.random.choice(a=len(node_neighbor_ids), size=num_neighbors,
+            if node_neighbor_sampled_probabilities is not None:
+                node_neighbor_sampled_probabilities = torch.softmax(
+                    torch.from_numpy(node_neighbor_sampled_probabilities).float(), dim=0).numpy()
+            if self.seed is None:
+                sampled_indices = np.random.choice(a=len(node_neighbor_ids), size=num_neighbors,
+                                                     p=node_neighbor_sampled_probabilities)
+            else:
+                sampled_indices = self.random_state.choice(a=len(node_neighbor_ids), size=num_neighbors,
                                                              p=node_neighbor_sampled_probabilities)
-                    else:
-                        sampled_indices = self.random_state.choice(a=len(node_neighbor_ids), size=num_neighbors,
-                                                                     p=node_neighbor_sampled_probabilities)
  
-                    nodes_neighbor_ids[idx, :] = node_neighbor_ids[sampled_indices]
-                    nodes_edge_ids[idx, :] = node_edge_ids[sampled_indices]
-                    nodes_neighbor_times[idx, :] = node_neighbor_times[sampled_indices]
-                    nodes_neighbor_pattern_ids[idx, :] = node_neighbor_pattern_ids_[sampled_indices]
+            nodes_neighbor_ids[idx, :] = node_neighbor_ids[sampled_indices]
+            nodes_edge_ids[idx, :] = node_edge_ids[sampled_indices]
+            nodes_neighbor_times[idx, :] = node_neighbor_times[sampled_indices]
+            nodes_neighbor_pattern_ids[idx, :] = node_neighbor_pattern_ids_[sampled_indices]
  
-                    sorted_position = nodes_neighbor_times[idx, :].argsort()
-                    nodes_neighbor_ids[idx, :] = nodes_neighbor_ids[idx, :][sorted_position]
-                    nodes_edge_ids[idx, :] = nodes_edge_ids[idx, :][sorted_position]
-                    nodes_neighbor_times[idx, :] = nodes_neighbor_times[idx, :][sorted_position]
-                    nodes_neighbor_pattern_ids[idx, :] = nodes_neighbor_pattern_ids[idx, :][sorted_position]
-                elif self.sample_neighbor_strategy == "recent":
-                    node_neighbor_ids = node_neighbor_ids[-num_neighbors:]
-                    node_edge_ids = node_edge_ids[-num_neighbors:]
-                    node_neighbor_times = node_neighbor_times[-num_neighbors:]
-                    node_neighbor_pattern_ids_ = node_neighbor_pattern_ids_[-num_neighbors:]
- 
-                    nodes_neighbor_ids[idx, num_neighbors - len(node_neighbor_ids):] = node_neighbor_ids
-                    nodes_edge_ids[idx, num_neighbors - len(node_edge_ids):] = node_edge_ids
-                    nodes_neighbor_times[idx, num_neighbors - len(node_neighbor_times):] = node_neighbor_times
-                    nodes_neighbor_pattern_ids[idx, num_neighbors - len(node_neighbor_times):] = node_neighbor_pattern_ids_
-                else:
-                    raise ValueError(f"Not implemented error for sample_neighbor_strategy {self.sample_neighbor_strategy}!")
- 
+            sorted_position = nodes_neighbor_times[idx, :].argsort()
+            nodes_neighbor_ids[idx, :] = nodes_neighbor_ids[idx, :][sorted_position]
+            nodes_edge_ids[idx, :] = nodes_edge_ids[idx, :][sorted_position]
+            nodes_neighbor_times[idx, :] = nodes_neighbor_times[idx, :][sorted_position]
+            nodes_neighbor_pattern_ids[idx, :] = nodes_neighbor_pattern_ids[idx, :][sorted_position]
+
         return nodes_neighbor_ids, nodes_edge_ids, nodes_neighbor_times, nodes_neighbor_pattern_ids
  
     def get_multi_hop_neighbors(self, num_hops, node_ids, node_interact_times, node_pattern_ids=None, num_neighbors=20):
