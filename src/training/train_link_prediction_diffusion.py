@@ -373,11 +373,13 @@ def main(args):
                 for i in range(batch_size):
                     start = i * args.num_neighbors
                     end = start + args.num_neighbors
-                    if not valid_mask[i].any():
+                    if not valid_mask[i].any(): 
+                        # if the source node does not have any historical neighbors, we will just repeat the source node as its own neighbor
                         batch_neighbors_dst_node_ids[start:end] = batch_src_node_ids[i]
                         batch_neighbors_node_interact_times[start:end] = batch_node_interact_times[i]
                         continue
 
+                    # get valid neighbors and their corresponding times, then repeat them to fill the batch_neighbors_dst_node_ids and batch_neighbors_node_interact_times arrays
                     valid_neighbors = neighbor_node_ids[i, valid_mask[i]]
                     valid_times = neighbor_times[i, valid_mask[i]]
                     repeated_indices = np.arange(args.num_neighbors) % len(valid_neighbors)
