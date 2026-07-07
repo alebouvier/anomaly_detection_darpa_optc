@@ -461,14 +461,24 @@ def main(args):
 
                     # get temporal embedding of negative source and negative destination nodes
                     # two Tensors, with shape (batch_size, node_feat_dim)
-                    batch_neg_src_node_embeddings, batch_neg_dst_node_embeddings = (
-                        model[0].compute_src_dst_node_temporal_embeddings(
-                            src_node_ids=batch_neg_src_node_ids,
-                            dst_node_ids=batch_neg_dst_node_ids,
-                            node_interact_times=batch_neg_node_interact_times,
-                            node_pattern_ids=batch_neg_pattern_ids,
+                    if len(batch_neg_src_node_ids) > 0:
+                        batch_neg_src_node_embeddings, batch_neg_dst_node_embeddings = (
+                            model[0].compute_src_dst_node_temporal_embeddings(
+                                src_node_ids=batch_neg_src_node_ids,
+                                dst_node_ids=batch_neg_dst_node_ids,
+                                node_interact_times=batch_neg_node_interact_times,
+                                node_pattern_ids=batch_neg_pattern_ids,
+                            )
                         )
-                    )
+                    else:
+                        batch_neg_src_node_embeddings = torch.empty(
+                            (0, batch_src_node_embeddings.shape[1]),
+                            device=batch_src_node_embeddings.device,
+                        )
+                        batch_neg_dst_node_embeddings = torch.empty(
+                            (0, batch_dst_node_embeddings.shape[1]),
+                            device=batch_dst_node_embeddings.device,
+                        )
                 elif args.model_name in ["JODIE", "DyRep", "TGN"]:
                     # note that negative nodes do not change the memories while the positive nodes change the memories,
                     # we need to first compute the embeddings of negative nodes for memory-based models
