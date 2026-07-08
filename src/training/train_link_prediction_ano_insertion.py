@@ -306,14 +306,9 @@ def main(args):
                 normal_train_data_indices = train_data_indices[train_data.labels[train_data_indices] == 0]
                 ano_train_data_indices = train_data_indices[train_data.labels[train_data_indices] == 1]
 
-                if len(normal_train_data_indices) == 0:
+                if len(normal_train_data_indices) == 0 or len(ano_train_data_indices) == 0:
                     continue
 
-                # sample 2% of training indices
-                # if len(normal_train_data_indices) > 0:
-                #     sample_size = max(1, int(0.05 * len(normal_train_data_indices)))
-                #     normal_train_data_indices = np.random.choice(normal_train_data_indices, size=sample_size, replace=False)
-                
                 (
                     batch_src_node_ids,
                     batch_dst_node_ids,
@@ -345,6 +340,25 @@ def main(args):
                     train_data.labels[ano_train_data_indices],
                     train_data.pattern_ids[ano_train_data_indices],
                 )
+
+                if len(batch_src_node_ids) < len(batch_ano_src_node_ids):
+                    # repeat the normal edges to match the number of anomalous edges
+                    repeat_factor = len(batch_ano_src_node_ids) // len(batch_src_node_ids) + 1
+                    batch_src_node_ids = np.tile(batch_src_node_ids, repeat_factor)
+                    batch_dst_node_ids = np.tile(batch_dst_node_ids, repeat_factor)
+                    batch_node_interact_times = np.tile(batch_node_interact_times, repeat_factor)
+                    batch_edge_ids = np.tile(batch_edge_ids, repeat_factor)
+                    batch_labels = np.tile(batch_labels, repeat_factor)
+                    batch_pattern_ids = np.tile(batch_pattern_ids, repeat_factor)
+                elif len(batch_src_node_ids) > len(batch_ano_src_node_ids):
+                    # repeat the anomalous edges to match the number of normal edges
+                    repeat_factor = len(batch_src_node_ids) // len(batch_ano_src_node_ids) + 1
+                    batch_ano_src_node_ids = np.tile(batch_ano_src_node_ids, repeat_factor)
+                    batch_ano_dst_node_ids = np.tile(batch_ano_dst_node_ids, repeat_factor)
+                    batch_ano_node_interact_times = np.tile(batch_ano_node_interact_times, repeat_factor)
+                    batch_ano_edge_ids = np.tile(batch_ano_edge_ids, repeat_factor)
+                    batch_ano_labels = np.tile(batch_ano_labels, repeat_factor)
+                    batch_ano_pattern_ids = np.tile(batch_ano_pattern_ids, repeat_factor)
 
                 neg_edge_sample_size = max(0, len(batch_src_node_ids) - len(batch_ano_src_node_ids))
 
@@ -450,14 +464,24 @@ def main(args):
                 elif args.model_name in ["DyGFormer"]:
                     # get temporal embedding of source and destination nodes
                     # two Tensors, with shape (batch_size, node_feat_dim)
-                    batch_src_node_embeddings, batch_dst_node_embeddings = model[
-                        0
-                    ].compute_src_dst_node_temporal_embeddings(
-                        src_node_ids=batch_src_node_ids,
-                        dst_node_ids=batch_dst_node_ids,
-                        node_interact_times=batch_node_interact_times,
-                        node_pattern_ids=batch_pattern_ids,
-                    )
+                    if len(batch_src_node_ids) > 0:
+                        batch_src_node_embeddings, batch_dst_node_embeddings = model[
+                            0
+                        ].compute_src_dst_node_temporal_embeddings(
+                            src_node_ids=batch_src_node_ids,
+                            dst_node_ids=batch_dst_node_ids,
+                            node_interact_times=batch_node_interact_times,
+                            node_pattern_ids=batch_pattern_ids,
+                        )
+                    else:
+                        batch_src_node_embeddings = torch.empty(
+                            (0, node_raw_features.shape[1]),
+                            device=node_raw_features.device,
+                        )
+                        batch_dst_node_embeddings = torch.empty(
+                            (0, node_raw_features.shape[1]),
+                            device=node_raw_features.device,
+                        )
 
                     # get temporal embedding of negative source and negative destination nodes
                     # two Tensors, with shape (batch_size, node_feat_dim)

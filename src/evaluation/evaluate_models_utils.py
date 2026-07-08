@@ -382,35 +382,36 @@ def evaluate_model_link_prediction_ano_insertion(
             neg_edge_sample_size = max(0, len(batch_src_node_ids) - len(batch_ano_src_node_ids))
 
             # Retrieve ground-truth labels for the actual links
-            batch_labels = evaluate_data.labels[evaluate_data_indices]
-            if neg_edge_sample_size > 0:
-                batch_neg_src_node_ids, batch_neg_dst_node_ids = (
-                    evaluate_neg_edge_sampler.sample(
-                        size=neg_edge_sample_size,
-                        batch_src_node_ids=batch_src_node_ids,
-                        batch_dst_node_ids=batch_dst_node_ids,
-                        current_batch_start_time=batch_node_interact_times[0],
-                        current_batch_end_time=batch_node_interact_times[-1],
-                    )
-                )
-                batch_neg_src_node_ids = batch_src_node_ids[:neg_edge_sample_size]
-                batch_neg_labels = np.zeros(neg_edge_sample_size)
-                batch_neg_pattern_ids = np.zeros(neg_edge_sample_size)
-            else:
-                batch_neg_src_node_ids = np.array([], dtype=np.int64)
-                batch_neg_dst_node_ids = np.array([], dtype=np.int64)
-                batch_neg_labels = np.array([], dtype=np.int64)
-                batch_neg_pattern_ids = np.array([], dtype=np.int64)
+            # batch_labels = evaluate_data.labels[evaluate_data_indices]
+            # if neg_edge_sample_size > 0:
+            #     batch_neg_src_node_ids, batch_neg_dst_node_ids = (
+            #         evaluate_neg_edge_sampler.sample(
+            #             size=neg_edge_sample_size,
+            #             batch_src_node_ids=batch_src_node_ids,
+            #             batch_dst_node_ids=batch_dst_node_ids,
+            #             current_batch_start_time=batch_node_interact_times[0],
+            #             current_batch_end_time=batch_node_interact_times[-1],
+            #         )
+            #     )
+            #     batch_neg_src_node_ids = batch_src_node_ids[:neg_edge_sample_size]
+            #     batch_neg_labels = np.zeros(neg_edge_sample_size)
+            #     batch_neg_pattern_ids = np.zeros(neg_edge_sample_size)
+            # else:
+            batch_neg_src_node_ids = np.array([], dtype=np.int64)
+            batch_neg_dst_node_ids = np.array([], dtype=np.int64)
+            batch_neg_node_interact_times = np.array([], dtype=np.float32)
+            batch_neg_labels = np.array([], dtype=np.int64)
+            batch_neg_pattern_ids = np.array([], dtype=np.int64)
+
                 
 
             if len(batch_ano_src_node_ids) > 0:
                 batch_neg_src_node_ids = np.concatenate([batch_neg_src_node_ids, batch_ano_src_node_ids])
                 batch_neg_dst_node_ids = np.concatenate([batch_neg_dst_node_ids, batch_ano_dst_node_ids])
-                batch_neg_node_interact_times = np.concatenate([batch_node_interact_times[:neg_edge_sample_size], batch_ano_node_interact_times])
+                batch_neg_node_interact_times = np.concatenate([batch_neg_node_interact_times, batch_ano_node_interact_times])
                 batch_neg_labels = np.concatenate([batch_neg_labels, batch_ano_labels])
                 batch_neg_pattern_ids = np.concatenate([batch_neg_pattern_ids, batch_ano_pattern_ids])
-            else:
-                batch_neg_node_interact_times = batch_node_interact_times
+
 
 
             # we need to compute for positive and negative edges respectively, because the new sampling strategy (for evaluation) allows the negative source nodes to be
