@@ -215,7 +215,7 @@ class Diffusion_Cond(nn.Module):
 
 
     # Algorithm 2 (including returning all samples)
-    def p_sample_loop(self, model, shape, y):
+    def p_sample_loop(self, model, shape, y, proportions):
         device = next(model.parameters()).device
 
         b = shape[0]
@@ -229,15 +229,19 @@ class Diffusion_Cond(nn.Module):
             embs.append(emb)
 
         embs = embs[::-1]
-        steps = [0, int(self.timesteps/10), int(self.timesteps/8), int(self.timesteps/4), int(self.timesteps/2)]
+
+        steps = []
+        for prop in proportions:
+            step = min(int(self.timesteps * prop), len(embs) -1)
+            steps.append(step)
         
         out = [embs[step] for step in steps]
         return out
 
 
     @torch.no_grad()
-    def sample(self, shape, y):
-        return self.p_sample_loop(self.encoder, shape, y)
+    def sample(self, shape, y, proportions=[0, 1/10, 1/8, 1/4, 1/2]):
+        return self.p_sample_loop(self.encoder, shape, y, proportions)
 
 
     def forward(self, input, labels, device): 

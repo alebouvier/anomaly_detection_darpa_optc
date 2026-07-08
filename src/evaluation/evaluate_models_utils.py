@@ -8,6 +8,7 @@ import time
 import argparse
 import os
 import json
+from typing import Optional
 
 from models.EdgeBank import edge_bank_link_prediction
 from utils.metrics import get_link_prediction_metrics, get_node_classification_metrics
@@ -284,7 +285,7 @@ def evaluate_model_link_prediction(
     else:
         return evaluate_losses, evaluate_metrics
 
-def evaluate_model_link_prediction_ano_insertion(
+def evaluate_model_link_prediction_diffusion(
     model_name: str,
     model: nn.Module,
     neighbor_sampler: NeighborSampler,
@@ -297,37 +298,32 @@ def evaluate_model_link_prediction_ano_insertion(
     full_return: bool = False,
     temp: int = 1,
     return_batch_losses: bool = False,
+    diffusion_model: Optional[nn.Module] = None,
+    return_detailed_metrics: bool = False,
 ):
     """
-    evaluate models on the link prediction task
-    :param model_name: str, name of the model
-    :param model: nn.Module, the model to be evaluated
-    :param neighbor_sampler: NeighborSampler, neighbor sampler
-    :param evaluate_idx_data_loader: DataLoader, evaluate index data loader
-    :param evaluate_neg_edge_sampler: NegativeEdgeSampler, evaluate negative edge sampler
-    :param evaluate_data: Data, data to be evaluated
-    :param loss_func: nn.Module, loss function
-    :param num_neighbors: int, number of neighbors to sample for each node
-    :param time_gap: int, time gap for neighbors to compute node features
-    :return:
+    Evaluate link prediction with standard negatives plus diffusion-generated negatives.
+    The returned detailed metrics are grouped by the negative source: sampled negatives
+    and each diffusion level produced by the diffusion model.
     """
-    # Ensures the random sampler uses a fixed seed for evaluation (i.e. we always sample the same negatives for validation / test set)
     assert evaluate_neg_edge_sampler.seed is not None
     evaluate_neg_edge_sampler.reset_random_state()
 
     if model_name in ["DyRep", "TGAT", "TGN", "CAWN", "TCL", "GraphMixer", "DyGFormer"]:
-        # evaluation phase use all the graph information
         model[0].set_neighbor_sampler(neighbor_sampler)
 
     model.eval()
+    if diffusion_model is not None:
+        diffusion_model.eval()
 
     with torch.no_grad():
-        # store evaluate losses and metrics
         evaluate_losses, evaluate_metrics = [], []
         batch_losses = []
-        all_predicted_links = []  # (src, dst, score)
-        all_actual_links = []  # (src, dst, label)
+        evaluate_metrics_by_negative_source = {}
+        all_predicted_links = []
+        all_actual_links = []
         non_existant_links = []
+        non_existant_links_by_negative_source = {}
         evaluate_idx_data_loader_tqdm = tqdm(
             evaluate_idx_data_loader, ncols=120, mininterval=120
         )
@@ -335,67 +331,32 @@ def evaluate_model_link_prediction_ano_insertion(
             evaluate_idx_data_loader_tqdm
         ):
             evaluate_data_indices = evaluate_data_indices.numpy()
-            normal_evaluate_data_indices = evaluate_data_indices[evaluate_data.labels[evaluate_data_indices] == 0]
-            ano_evaluate_data_indices = evaluate_data_indices[evaluate_data.labels[evaluate_data_indices] == 1]
-            
+
             (
                 batch_src_node_ids,
                 batch_dst_node_ids,
                 batch_node_interact_times,
                 batch_edge_ids,
             ) = (
-                evaluate_data.src_node_ids[normal_evaluate_data_indices],
-                evaluate_data.dst_node_ids[normal_evaluate_data_indices],
-                evaluate_data.node_interact_times[normal_evaluate_data_indices],
-                evaluate_data.edge_ids[normal_evaluate_data_indices],
+                evaluate_data.src_node_ids[evaluate_data_indices],
+                evaluate_data.dst_node_ids[evaluate_data_indices],
+                evaluate_data.node_interact_times[evaluate_data_indices],
+                evaluate_data.edge_ids[evaluate_data_indices],
             )
-
-            (
-                batch_ano_src_node_ids,
-                batch_ano_dst_node_ids,
-                batch_ano_node_interact_times,
-                batch_ano_edge_ids,
-            ) = (
-                evaluate_data.src_node_ids[ano_evaluate_data_indices],
-                evaluate_data.dst_node_ids[ano_evaluate_data_indices],
-                evaluate_data.node_interact_times[ano_evaluate_data_indices],
-                evaluate_data.edge_ids[ano_evaluate_data_indices],
-            )
-
-            neg_edge_sample_size = max(0, len(batch_src_node_ids) - len(batch_ano_src_node_ids))
-
-            # Retrieve ground-truth labels for the actual links
             batch_labels = evaluate_data.labels[evaluate_data_indices]
-            if neg_edge_sample_size > 0:
-                batch_neg_src_node_ids, batch_neg_dst_node_ids = (
-                    evaluate_neg_edge_sampler.sample(
-                        size=neg_edge_sample_size,
-                        batch_src_node_ids=batch_src_node_ids,
-                        batch_dst_node_ids=batch_dst_node_ids,
-                        current_batch_start_time=batch_node_interact_times[0],
-                        current_batch_end_time=batch_node_interact_times[-1],
-                    )
-                )
-                batch_neg_src_node_ids = batch_src_node_ids[:neg_edge_sample_size]
-            else:
-                batch_neg_src_node_ids = np.array([], dtype=np.int64)
-                batch_neg_dst_node_ids = np.array([], dtype=np.int64)
 
-            if len(batch_ano_src_node_ids) > 0:
-                batch_neg_src_node_ids = np.concatenate([batch_neg_src_node_ids, batch_ano_src_node_ids])
-                batch_neg_dst_node_ids = np.concatenate([batch_neg_dst_node_ids, batch_ano_dst_node_ids])
-                batch_neg_node_interact_times = np.concatenate([batch_node_interact_times[:neg_edge_sample_size], batch_ano_node_interact_times])
-            else:
-                batch_neg_node_interact_times = batch_node_interact_times
+            _, batch_neg_dst_node_ids, _, _ = evaluate_neg_edge_sampler.sample(
+                size=len(batch_src_node_ids),
+                batch_src_node_ids=batch_src_node_ids,
+                batch_dst_node_ids=batch_dst_node_ids,
+                current_batch_start_time=float(np.min(batch_node_interact_times)),
+                current_batch_end_time=float(np.max(batch_node_interact_times)),
+                return_sampling_counts=True,
+            )
+            batch_neg_src_node_ids = batch_src_node_ids
+            batch_neg_node_interact_times = batch_node_interact_times
 
-            if len(batch_neg_node_interact_times) != len(batch_neg_src_node_ids):
-                print("problem")
-
-            # we need to compute for positive and negative edges respectively, because the new sampling strategy (for evaluation) allows the negative source nodes to be
-            # different from the source nodes, this is different from previous works that just replace destination nodes with negative destination nodes
             if model_name in ["TGAT", "CAWN", "TCL"]:
-                # get temporal embedding of source and destination nodes
-                # two Tensors, with shape (batch_size, node_feat_dim)
                 batch_src_node_embeddings, batch_dst_node_embeddings = model[
                     0
                 ].compute_src_dst_node_temporal_embeddings(
@@ -404,9 +365,6 @@ def evaluate_model_link_prediction_ano_insertion(
                     node_interact_times=batch_node_interact_times,
                     num_neighbors=num_neighbors,
                 )
-
-                # get temporal embedding of negative source and negative destination nodes
-                # two Tensors, with shape (batch_size, node_feat_dim)
                 batch_neg_src_node_embeddings, batch_neg_dst_node_embeddings = model[
                     0
                 ].compute_src_dst_node_temporal_embeddings(
@@ -416,8 +374,6 @@ def evaluate_model_link_prediction_ano_insertion(
                     num_neighbors=num_neighbors,
                 )
             elif model_name in ["GraphMixer"]:
-                # get temporal embedding of source and destination nodes
-                # two Tensors, with shape (batch_size, node_feat_dim)
                 batch_src_node_embeddings, batch_dst_node_embeddings = model[
                     0
                 ].compute_src_dst_node_temporal_embeddings(
@@ -427,9 +383,6 @@ def evaluate_model_link_prediction_ano_insertion(
                     num_neighbors=num_neighbors,
                     time_gap=time_gap,
                 )
-
-                # get temporal embedding of negative source and negative destination nodes
-                # two Tensors, with shape (batch_size, node_feat_dim)
                 batch_neg_src_node_embeddings, batch_neg_dst_node_embeddings = model[
                     0
                 ].compute_src_dst_node_temporal_embeddings(
@@ -440,8 +393,6 @@ def evaluate_model_link_prediction_ano_insertion(
                     time_gap=time_gap,
                 )
             elif model_name in ["DyGFormer"]:
-                # get temporal embedding of source and destination nodes
-                # two Tensors, with shape (batch_size, node_feat_dim)
                 batch_src_node_embeddings, batch_dst_node_embeddings = model[
                     0
                 ].compute_src_dst_node_temporal_embeddings(
@@ -449,9 +400,6 @@ def evaluate_model_link_prediction_ano_insertion(
                     dst_node_ids=batch_dst_node_ids,
                     node_interact_times=batch_node_interact_times,
                 )
-
-                # get temporal embedding of negative source and negative destination nodes
-                # two Tensors, with shape (batch_size, node_feat_dim)
                 batch_neg_src_node_embeddings, batch_neg_dst_node_embeddings = model[
                     0
                 ].compute_src_dst_node_temporal_embeddings(
@@ -459,12 +407,7 @@ def evaluate_model_link_prediction_ano_insertion(
                     dst_node_ids=batch_neg_dst_node_ids,
                     node_interact_times=batch_neg_node_interact_times,
                 )
-
             elif model_name in ["JODIE", "DyRep", "TGN"]:
-                # note that negative nodes do not change the memories while the positive nodes change the memories,
-                # we need to first compute the embeddings of negative nodes for memory-based models
-                # get temporal embedding of negative source and negative destination nodes
-                # two Tensors, with shape (batch_size, node_feat_dim)
                 batch_neg_src_node_embeddings, batch_neg_dst_node_embeddings = model[
                     0
                 ].compute_src_dst_node_temporal_embeddings(
@@ -475,9 +418,6 @@ def evaluate_model_link_prediction_ano_insertion(
                     edges_are_positive=False,
                     num_neighbors=num_neighbors,
                 )
-
-                # get temporal embedding of source and destination nodes
-                # two Tensors, with shape (batch_size, node_feat_dim)
                 batch_src_node_embeddings, batch_dst_node_embeddings = model[
                     0
                 ].compute_src_dst_node_temporal_embeddings(
@@ -491,60 +431,41 @@ def evaluate_model_link_prediction_ano_insertion(
             else:
                 raise ValueError(f"Wrong value for model_name {model_name}!")
 
-            # get positive and negative probabilities, shape (batch_size, )
-            # positive_probabilities = model[1](input_1=batch_src_node_embeddings, input_2=batch_dst_node_embeddings).squeeze(dim=-1).sigmoid()
-            # negative_probabilities = model[1](input_1=batch_neg_src_node_embeddings, input_2=batch_neg_dst_node_embeddings).squeeze(dim=-1).sigmoid()
-
             positive_logits = model[1](
                 input_1=batch_src_node_embeddings, input_2=batch_dst_node_embeddings
             ).squeeze(dim=-1)
-            negative_logits = model[1](
-                input_1=batch_neg_src_node_embeddings,
-                input_2=batch_neg_dst_node_embeddings,
-            ).squeeze(dim=-1)
             positive_probabilities = torch.sigmoid(positive_logits / temp)
-            negative_probabilities = torch.sigmoid(negative_logits / temp)
 
-            predicts = torch.cat(
-                [positive_probabilities, negative_probabilities], dim=0
-            )
-            labels = torch.cat(
-                [
-                    torch.ones_like(positive_probabilities),
-                    torch.zeros_like(negative_probabilities),
-                ],
-                dim=0,
+            negative_probabilities_by_source = {}
+            negative_probabilities_by_source["negative_sampler"] = torch.sigmoid(
+                model[1](
+                    input_1=batch_neg_src_node_embeddings,
+                    input_2=batch_neg_dst_node_embeddings,
+                ).squeeze(dim=-1)
+                / temp
             )
 
-            loss = loss_func(input=predicts, target=labels)
-
-            evaluate_losses.append(loss.item())
-            batch_losses.append(loss.item())
-
-            evaluate_metrics.append(
-                get_link_prediction_metrics(
-                    predicts=predicts, labels=labels, threshold=0.5
+            if diffusion_model is not None:
+                proportions = [0, 0.5, 0.8, 0.9, 0.95, 1]
+                diffusion_outputs = diffusion_model.sample(
+                    batch_src_node_embeddings.shape,
+                    batch_src_node_embeddings,
+                    proportions
                 )
-            )
-
-            if batch_idx % 1000 == 0:
-                evaluate_idx_data_loader_tqdm.set_description(
-                    f"evaluate for the {batch_idx + 1}-th batch, evaluate loss: {loss.item()}"
-                )
-
-            if full_return:
-                # Store actual links with their original labels (0=normal, 1=anomaly)
-                for src, dst, label, timestamp in zip(
-                    batch_src_node_ids,
-                    batch_dst_node_ids,
-                    batch_labels,
-                    batch_node_interact_times,
-                ):
-                    all_actual_links.append(
-                        (int(src), int(dst), int(label), float(timestamp))
+                if not isinstance(diffusion_outputs, (list, tuple)):
+                    diffusion_outputs = [diffusion_outputs]
+                for level_idx, generated_dst_embeddings in enumerate(diffusion_outputs):
+                    negative_probabilities_by_source[
+                        f"diffusion_level_{proportions[level_idx]}"
+                    ] = torch.sigmoid(
+                        model[1](
+                            input_1=batch_src_node_embeddings,
+                            input_2=generated_dst_embeddings,
+                        ).squeeze(dim=-1)
+                        / temp
                     )
 
-                # Store predictions with scores for actual links only
+            if full_return:
                 for src, dst, score, timestamp in zip(
                     batch_src_node_ids,
                     batch_dst_node_ids,
@@ -555,17 +476,95 @@ def evaluate_model_link_prediction_ano_insertion(
                         (int(src), int(dst), float(score), float(timestamp))
                     )
 
-                for src, dst, score, timestamp in zip(
-                    batch_neg_src_node_ids,
-                    batch_neg_dst_node_ids,
-                    negative_probabilities,
+            for negative_name, negative_probabilities in negative_probabilities_by_source.items():
+                predicts = torch.cat(
+                    [positive_probabilities, negative_probabilities], dim=0
+                )
+                labels = torch.cat(
+                    [
+                        torch.ones_like(positive_probabilities),
+                        torch.zeros_like(negative_probabilities),
+                    ],
+                    dim=0,
+                )
+                loss = loss_func(input=predicts, target=labels)
+
+                if negative_name == "negative_sampler":
+                    evaluate_losses.append(loss.item())
+                    batch_losses.append(loss.item())
+                    evaluate_metrics.append(
+                        get_link_prediction_metrics(
+                            predicts=predicts, labels=labels, threshold=0.5
+                        )
+                    )
+
+                if return_detailed_metrics:
+                    if negative_name not in evaluate_metrics_by_negative_source:
+                        evaluate_metrics_by_negative_source[negative_name] = []
+                    evaluate_metrics_by_negative_source[negative_name].append(
+                        get_link_prediction_metrics(
+                            predicts=predicts, labels=labels, threshold=0.5
+                        )
+                    )
+
+                if full_return:
+
+                    non_existant_links_by_negative_source.setdefault(
+                        negative_name, []
+                    ).extend(
+                        [
+                            (
+                                int(src),
+                                int(dst),
+                                float(score),
+                                float(timestamp),
+                            )
+                            for src, dst, score, timestamp in zip(
+                                batch_neg_src_node_ids,
+                                batch_neg_dst_node_ids,
+                                negative_probabilities,
+                                batch_node_interact_times,
+                            )
+                        ]
+                    )
+                    if negative_name == "negative_sampler":
+                        for src, dst, score, timestamp in zip(
+                            batch_neg_src_node_ids,
+                            batch_neg_dst_node_ids,
+                            negative_probabilities,
+                            batch_node_interact_times,
+                        ):
+                            non_existant_links.append(
+                                (int(src), int(dst), float(score), float(timestamp))
+                            )
+
+            if batch_idx % 1000 == 0:
+                evaluate_idx_data_loader_tqdm.set_description(
+                    f"evaluate for the {batch_idx + 1}-th batch"
+                )
+
+            if full_return:
+                for src, dst, label, timestamp in zip(
+                    batch_src_node_ids,
+                    batch_dst_node_ids,
+                    batch_labels,
                     batch_node_interact_times,
                 ):
-                    non_existant_links.append(
-                        (int(src), int(dst), float(score), float(timestamp))
+                    all_actual_links.append(
+                        (int(src), int(dst), int(label), float(timestamp))
                     )
 
     if full_return:
+        if return_detailed_metrics:
+            return (
+                evaluate_losses,
+                evaluate_metrics,
+                all_predicted_links,
+                all_actual_links,
+                non_existant_links,
+                non_existant_links_by_negative_source,
+                evaluate_metrics_by_negative_source,
+            )
         return (
             evaluate_losses,
             evaluate_metrics,
@@ -574,7 +573,11 @@ def evaluate_model_link_prediction_ano_insertion(
             non_existant_links,
         )
     elif return_batch_losses:
+        if return_detailed_metrics:
+            return evaluate_losses, evaluate_metrics, batch_losses, evaluate_metrics_by_negative_source
         return evaluate_losses, evaluate_metrics, batch_losses
+    elif return_detailed_metrics:
+        return evaluate_losses, evaluate_metrics, evaluate_metrics_by_negative_source
     else:
         return evaluate_losses, evaluate_metrics
 

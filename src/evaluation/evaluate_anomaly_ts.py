@@ -148,7 +148,7 @@ def print_results(dataset_name, model_name, metrics, conf_evaluator, mode, level
     # ------------------------------------------------------------------
     # 6. 2 figures side by side: histogram of scores in the calibration bins for positive samples and negative samples (abscisse [0,1])
     # ------------------------------------------------------------------
-    if "calibration_bin_counts_pos" in metrics and "calibration_bin_counts_neg" in metrics and mode == "link_prediction":
+    if "calibration_bin_counts_pos" in metrics and "calibration_bin_counts_neg" in metrics and "link_prediction" in mode:
         fig, ax = plt.subplots()
         bin_counts_pos = metrics['calibration_bin_counts_pos']
         bin_counts_neg = metrics['calibration_bin_counts_neg']
@@ -218,7 +218,15 @@ def print_results(dataset_name, model_name, metrics, conf_evaluator, mode, level
         fig.savefig(os.path.join(output_folder, f"adaptive_miscoverage_level.png"))
         plt.close(fig)
 
-def link_prediciton_metrics(predicted_links, actual_links, non_exist_links, conf_evaluator, names):
+def link_prediciton_metrics(
+    predicted_links,
+    actual_links,
+    non_exist_links,
+    conf_evaluator,
+    names,
+    mode="link_prediction",
+    level="edge",
+):
     dataset_name, model_name = names
 
     # y_score are scores predicited by the model
@@ -278,7 +286,7 @@ def link_prediciton_metrics(predicted_links, actual_links, non_exist_links, conf
     metrics["confusion_matrix"] = confusion_matrix(y_true, y_pred)
 
 
-    print_results(dataset_name, model_name, metrics, conf_evaluator, mode="link_prediction")
+    print_results(dataset_name, model_name, metrics, conf_evaluator, mode=mode, level=level)
 
 def anomaly_detection_edge_level_metrics(predicted_links, actual_links, non_exist_links, conf_evaluator, names):
     dataset_name, model_name = names
@@ -400,10 +408,25 @@ def anomaly_detection_graph_level_metrics(predicted_links, actual_links, non_exi
 
     print_results(dataset_name, model_name, metrics, None, "anomaly_detection", level="graph")
 
-def load_results(folder, mode):
+def load_results(folder, mode, include_negative_source=False):
     predicted_links = load_pickle_file(f"{folder}/{mode}_predicted_links.pkl")
     actual_links = load_pickle_file(f"{folder}/{mode}_actual_links.pkl")
     non_exist_links = load_pickle_file(f"{folder}/non_exist_links.pkl")
+
+    if include_negative_source:
+        negative_source_path = f"{folder}/non_exist_links_by_negative_source.pkl"
+        if os.path.exists(negative_source_path):
+            non_exist_links_by_negative_source = load_pickle_file(
+                negative_source_path
+            )
+        else:
+            non_exist_links_by_negative_source = {}
+        return (
+            predicted_links,
+            actual_links,
+            non_exist_links,
+            non_exist_links_by_negative_source,
+        )
 
     return predicted_links, actual_links, non_exist_links
 
@@ -470,14 +493,23 @@ def main(args):
     )
 
     val_score_folder = f"{BASE}/val_result_data/{args.dataset_name}/{args.model_name}"
-    (val_predicted_links, val_actual_links, val_non_exist_links) = load_results(val_score_folder, "val")
+    (
+        val_predicted_links,
+        val_actual_links,
+        val_non_exist_links,
+        val_non_exist_links_by_negative_source,
+    ) = load_results(val_score_folder, "val", include_negative_source=True)
 
     if args.calibration:
         cal_score_folder = f"{BASE}/cal_result_data/{args.dataset_name}/{args.model_name}"
-        (cal_predicted_links, cal_actual_links, cal_non_exist_links) = load_results(cal_score_folder, "cal")
+        (cal_predicted_links, cal_actual_links, cal_non_exist_links) = load_results(
+            cal_score_folder, "cal"
+        )
 
     test_score_folder = f"{BASE}/test_result_data/{args.dataset_name}/{args.model_name}"
-    (test_predicted_links, test_actual_links, test_non_exist_links) = load_results(test_score_folder, "test")
+    (test_predicted_links, test_actual_links, test_non_exist_links) = load_results(
+        test_score_folder, "test"
+    )
 
     if args.calibration:
         conf_evaluator = ConformalForecastingEvaluator(cal_predicted_links, 
@@ -491,9 +523,33 @@ def main(args):
         conf_evaluator = None
 
 
-    link_prediciton_metrics(val_predicted_links, val_actual_links, val_non_exist_links, conf_evaluator, names=(args.dataset_name, args.model_name))
+    link_prediciton_metrics(
+        val_predicted_links,
+        val_actual_links,
+        val_non_exist_links,
+        conf_evaluator,
+        names=(args.dataset_name, args.model_name),
+    )
 
-    anomaly_detection_edge_level_metrics(test_predicted_links, test_actual_links, test_non_exist_links, conf_evaluator, names=(args.dataset_name, args.model_name))
+    for negative_name, negative_non_exist_links in val_non_exist_links_by_negative_source.items():
+        safe_negative_name = negative_name.replace(".", "_").replace(" ", "_")
+        link_prediciton_metrics(
+            val_predicted_links,
+            val_actual_links,
+            negative_non_exist_links,
+            conf_evaluator,
+            names=(args.dataset_name, args.model_name),
+            mode=f"link_prediction_{safe_negative_name}",
+            level=negative_name,
+        )
+
+    anomaly_detection_edge_level_metrics(
+        test_predicted_links,
+        test_actual_links,
+        test_non_exist_links,
+        conf_evaluator,
+        names=(args.dataset_name, args.model_name),
+    )
 
     anomaly_detection_graph_level_metrics(test_predicted_links, test_actual_links, test_non_exist_links, None, names=(args.dataset_name, args.model_name))
 

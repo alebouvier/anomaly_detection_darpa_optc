@@ -5,6 +5,7 @@ import os
 import numpy as np
 import warnings
 import json
+import torch
 import torch.nn as nn
 import pandas as pd
 
@@ -22,12 +23,12 @@ from utils.utils import (
 )
 from utils.utils import get_neighbor_sampler, NegativeEdgeSampler, BASE
 from evaluation.evaluate_models_utils import (
-    evaluate_model_link_prediction,
     evaluate_edge_bank_link_prediction,
-    evaluate_model_link_prediction_diffusion
+    evaluate_model_link_prediction_diffusion,
 )
 from utils.DataLoader import get_idx_data_loader, get_link_prediction_data
 from utils.EarlyStopping import EarlyStopping
+from utils.diffusion import Diffusion_Cond
 
 
 def main(args):
@@ -279,6 +280,25 @@ def main(args):
             )
             early_stopping.load_checkpoint(model, map_location="cpu")
 
+            diffusion_model = Diffusion_Cond(
+                in_feat=node_raw_features.shape[1],
+                out_feat=node_raw_features.shape[1],
+                timesteps=getattr(args, "diffusion_timesteps", 50),
+                y=node_raw_features.shape[1],
+            ).to(args.device)
+            diffusion_model_path = os.path.join(
+                load_model_folder, f"{args.load_model_name}_diffusion.pt"
+            )
+            if os.path.exists(diffusion_model_path):
+                diffusion_model.load_state_dict(
+                    torch.load(diffusion_model_path, map_location=args.device)
+                )
+                logger.info(f"Loaded diffusion model from {diffusion_model_path}")
+            else:
+                logger.warning(
+                    f"Diffusion checkpoint not found at {diffusion_model_path}; using randomly initialized diffusion model"
+                )
+
             model = convert_to_gpu(model, device=args.device)
 
             if args.model_name in ["JODIE", "DyRep", "TGN"]:
@@ -306,7 +326,9 @@ def main(args):
                     val_metrics,
                     val_predicted_links,
                     val_actual_links,
-                    non_exist_links,
+                    val_non_exist_links,
+                    val_non_exist_links_by_negative_source,
+                    val_metrics_by_negative_source,
                 ) = evaluate_model_link_prediction_diffusion(
                     model_name=args.model_name,
                     model=model,
@@ -319,6 +341,8 @@ def main(args):
                     time_gap=args.time_gap,
                     full_return=True,
                     temp=args.temperature,
+                    diffusion_model=diffusion_model,
+                    return_detailed_metrics=True,
                 )
                 val_score_folder = (
                 f"{BASE}/val_result_data/{args.dataset_name}/{args.model_name}"
@@ -328,7 +352,17 @@ def main(args):
                     val_predicted_links, f"{val_score_folder}/val_predicted_links.pkl"
                 )
                 save_pkl(val_actual_links, f"{val_score_folder}/val_actual_links.pkl")
-                save_pkl(non_exist_links, f"{val_score_folder}/non_exist_links.pkl")
+                save_pkl(val_non_exist_links, f"{val_score_folder}/non_exist_links.pkl")
+                save_pkl(
+                    val_non_exist_links_by_negative_source,
+                    f"{val_score_folder}/non_exist_links_by_negative_source.pkl",
+                )
+                for negative_name, non_exist_links in val_non_exist_links_by_negative_source.items():
+                    safe_negative_name = negative_name.replace(".", "_")
+                    save_pkl(
+                        non_exist_links,
+                        f"{val_score_folder}/non_exist_links_{safe_negative_name}.pkl",
+                    )
 
                 if args.inductive:
                     new_node_val_losses, new_node_val_metrics = (
@@ -343,6 +377,7 @@ def main(args):
                             num_neighbors=args.num_neighbors,
                             time_gap=args.time_gap,
                             temp=args.temperature,
+                            diffusion_model=diffusion_model,
                         )
                     )
 
@@ -356,8 +391,10 @@ def main(args):
                     cal_metrics,
                     cal_predicted_links,
                     cal_actual_links,
-                    non_exist_links,
-                ) = evaluate_model_link_prediction(
+                    cal_non_exist_links,
+                    cal_non_exist_links_by_negative_source,
+                    cal_metrics_by_negative_source,
+                ) = evaluate_model_link_prediction_diffusion(
                     model_name=args.model_name,
                     model=model,
                     neighbor_sampler=full_neighbor_sampler,
@@ -369,6 +406,8 @@ def main(args):
                     time_gap=args.time_gap,
                     full_return=True,
                     temp=args.temperature,
+                    diffusion_model=diffusion_model,
+                    return_detailed_metrics=True,
                 )
                 cal_score_folder = (
                     f"{BASE}/cal_result_data/{args.dataset_name}/{args.model_name}"
@@ -378,7 +417,17 @@ def main(args):
                     cal_predicted_links, f"{cal_score_folder}/cal_predicted_links.pkl"
                 )
                 save_pkl(cal_actual_links, f"{cal_score_folder}/cal_actual_links.pkl")
-                save_pkl(non_exist_links, f"{cal_score_folder}/non_exist_links.pkl")
+                save_pkl(cal_non_exist_links, f"{cal_score_folder}/non_exist_links.pkl")
+                save_pkl(
+                    cal_non_exist_links_by_negative_source,
+                    f"{cal_score_folder}/non_exist_links_by_negative_source.pkl",
+                )
+                for negative_name, non_exist_links in cal_non_exist_links_by_negative_source.items():
+                    safe_negative_name = negative_name.replace(".", "_")
+                    save_pkl(
+                        non_exist_links,
+                        f"{cal_score_folder}/non_exist_links_{safe_negative_name}.pkl",
+                    )
 
             if args.model_name in ["JODIE", "DyRep", "TGN"]:
                 # reload validation memory bank for new testing nodes
@@ -389,8 +438,10 @@ def main(args):
                 test_metrics,
                 test_predicted_links,
                 test_actual_links,
-                non_exist_links,
-            ) = evaluate_model_link_prediction(
+                test_non_exist_links,
+                test_non_exist_links_by_negative_source,
+                test_metrics_by_negative_source,
+            ) = evaluate_model_link_prediction_diffusion(
                 model_name=args.model_name,
                 model=model,
                 neighbor_sampler=full_neighbor_sampler,
@@ -402,6 +453,8 @@ def main(args):
                 time_gap=args.time_gap,
                 full_return=True,
                 temp=args.temperature,
+                diffusion_model=diffusion_model,
+                return_detailed_metrics=True,
             )
             test_score_folder = (
                 f"{BASE}/test_result_data/{args.dataset_name}/{args.model_name}"
@@ -411,7 +464,17 @@ def main(args):
                 test_predicted_links, f"{test_score_folder}/test_predicted_links.pkl"
             )
             save_pkl(test_actual_links, f"{test_score_folder}/test_actual_links.pkl")
-            save_pkl(non_exist_links, f"{test_score_folder}/non_exist_links.pkl")
+            save_pkl(test_non_exist_links, f"{test_score_folder}/non_exist_links.pkl")
+            save_pkl(
+                test_non_exist_links_by_negative_source,
+                f"{test_score_folder}/non_exist_links_by_negative_source.pkl",
+            )
+            for negative_name, non_exist_links in test_non_exist_links_by_negative_source.items():
+                safe_negative_name = negative_name.replace(".", "_")
+                save_pkl(
+                    non_exist_links,
+                    f"{test_score_folder}/non_exist_links_{safe_negative_name}.pkl",
+                )
 
             if args.model_name in ["JODIE", "DyRep", "TGN"]:
                 # reload validation memory bank for new testing nodes
@@ -419,7 +482,7 @@ def main(args):
 
             if args.inductive:
                 new_node_test_losses, new_node_test_metrics = (
-                    evaluate_model_link_prediction(
+                    evaluate_model_link_prediction_diffusion(
                         model_name=args.model_name,
                         model=model,
                         neighbor_sampler=full_neighbor_sampler,
@@ -430,6 +493,7 @@ def main(args):
                         num_neighbors=args.num_neighbors,
                         time_gap=args.time_gap,
                         temp=args.temperature,
+                        diffusion_model=diffusion_model,
                     )
                 )
             # store the evaluation metrics at the current run
@@ -448,6 +512,17 @@ def main(args):
                     )
                     logger.info(f"val {metric_name}, {average_val_metric:.4f}")
                     val_metric_dict[metric_name] = average_val_metric
+
+                for negative_name, negative_metrics in val_metrics_by_negative_source.items():
+                    if not negative_metrics:
+                        continue
+                    for metric_name in negative_metrics[0].keys():
+                        average_negative_metric = np.mean(
+                            [metric[metric_name] for metric in negative_metrics]
+                        )
+                        logger.info(
+                            f"val {negative_name} {metric_name}, {average_negative_metric:.4f}"
+                        )
 
                 if args.inductive:
                     logger.info(f"new node val loss: {np.mean(new_node_val_losses):.4f}")
@@ -470,6 +545,17 @@ def main(args):
                 )
                 logger.info(f"test {metric_name}, {average_test_metric:.4f}")
                 test_metric_dict[metric_name] = average_test_metric
+
+            for negative_name, negative_metrics in test_metrics_by_negative_source.items():
+                if not negative_metrics:
+                    continue
+                for metric_name in negative_metrics[0].keys():
+                    average_negative_metric = np.mean(
+                        [metric[metric_name] for metric in negative_metrics]
+                    )
+                    logger.info(
+                        f"test {negative_name} {metric_name}, {average_negative_metric:.4f}"
+                    )
 
             if args.inductive:
                 logger.info(f"new node test loss: {np.mean(new_node_test_losses):.4f}")
@@ -501,28 +587,33 @@ def main(args):
                 logger.removeHandler(ch)
 
             # save model result
+            result_json = {}
             if args.model_name not in ["JODIE", "DyRep", "TGN"]:
-                result_json = {
-                    "val metrics": {
-                        metric_name: f"{val_metric_dict[metric_name]:.4f}"
-                        for metric_name in val_metric_dict
-                    },
-                    "new node val metrics": {
-                        metric_name: f"{new_node_val_metric_dict[metric_name]:.4f}"
-                        for metric_name in new_node_val_metric_dict
-                    },
+                result_json["val metrics"] = {
+                    metric_name: f"{val_metric_dict[metric_name]:.4f}"
+                    for metric_name in val_metric_dict
                 }
-                result_json = json.dumps(result_json, indent=4)
+                if val_metrics_by_negative_source:
+                    result_json["val metrics by negative source"] = {
+                        negative_name: {
+                            metric_name: f"{np.mean([metric[metric_name] for metric in negative_metrics]):.4f}"
+                            for metric_name in negative_metrics[0]
+                        }
+                        for negative_name, negative_metrics in val_metrics_by_negative_source.items()
+                        if negative_metrics
+                    }
+                result_json["new node val metrics"] = {
+                    metric_name: f"{new_node_val_metric_dict[metric_name]:.4f}"
+                    for metric_name in new_node_val_metric_dict
+                }
 
-            result_json = {
-                "test metrics": {
-                    metric_name: f"{test_metric_dict[metric_name]:.4f}"
-                    for metric_name in test_metric_dict
-                },
-                "new node test metrics": {
-                    metric_name: f"{new_node_test_metric_dict[metric_name]:.4f}"
-                    for metric_name in new_node_test_metric_dict
-                },
+            result_json["test metrics"] = {
+                metric_name: f"{test_metric_dict[metric_name]:.4f}"
+                for metric_name in test_metric_dict
+            }
+            result_json["new node test metrics"] = {
+                metric_name: f"{new_node_test_metric_dict[metric_name]:.4f}"
+                for metric_name in new_node_test_metric_dict
             }
             result_json = json.dumps(result_json, indent=4)
 
@@ -547,6 +638,14 @@ def main(args):
                     f"average validate {metric_name}, {np.mean([val_metric_single_run[metric_name] for val_metric_single_run in val_metric_all_runs]):.4f} "
                     f"± {np.std([val_metric_single_run[metric_name] for val_metric_single_run in val_metric_all_runs], ddof=1):.4f}"
                 )
+            
+            for negative_name, negative_metrics in val_metrics_by_negative_source.items():
+                if not negative_metrics:
+                    continue
+                for metric_name in negative_metrics[0].keys():
+                    logger.info(
+                        f"validate {negative_name} {metric_name}, {np.mean([metric[metric_name] for metric in negative_metrics]):.4f}"
+                    )
 
             if args.inductive:
                 for metric_name in new_node_val_metric_all_runs[0].keys():

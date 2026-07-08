@@ -15,6 +15,7 @@ from training.train_link_prediction_diffusion import main as training_link_predi
 from evaluation.evaluate_link_prediction import main as validate_link_prediction
 from evaluation.evaluate_link_prediction_ano_insertion import main as validate_link_prediction_check
 from evaluation.evaluate_anomaly_ts import main as testing_anomaly_detection
+from evaluation.evaluate_link_prediction_diffusion import main as validate_link_prediction_diffusion
 from preprocessing.two_hop_non_neighbors import main as compute_2hop_non_neighbors
 
 
@@ -148,6 +149,14 @@ if __name__ == "__main__":
             for client in clients:
                 validation_link_prediction_args.dataset_name = f"optc_{client}"
                 validate_link_prediction(validation_link_prediction_args)
+        
+        elif task == "validate_link_prediction_diffusion":
+            validation_link_prediction_args = get_link_prediction_args(
+                is_evaluation=True
+            )
+            for client in clients:
+                validation_link_prediction_args.dataset_name = f"optc_{client}"
+                validate_link_prediction_diffusion(validation_link_prediction_args)
 
         elif task == "validate_link_prediction_ano_insertion":
             validation_link_prediction_args = get_link_prediction_args(
