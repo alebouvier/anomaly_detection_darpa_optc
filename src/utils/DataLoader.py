@@ -257,6 +257,22 @@ def get_link_prediction_data(
         labels=labels[train_mask],
         pattern_ids=pattern_ids[train_mask],
     )
+    train_data_normal = Data(
+        src_node_ids=src_node_ids[np.logical_and(train_mask, labels == 0)],
+        dst_node_ids=dst_node_ids[np.logical_and(train_mask, labels == 0)],
+        node_interact_times=node_interact_times[np.logical_and(train_mask, labels == 0)],
+        edge_ids=edge_ids[np.logical_and(train_mask, labels == 0)],
+        labels=labels[np.logical_and(train_mask, labels == 0)],
+        pattern_ids=pattern_ids[np.logical_and(train_mask, labels == 0)],
+    )
+    train_data_anomaly = Data(
+        src_node_ids=src_node_ids[np.logical_and(train_mask, labels == 1)],
+        dst_node_ids=dst_node_ids[np.logical_and(train_mask, labels == 1)],
+        node_interact_times=node_interact_times[np.logical_and(train_mask, labels == 1)],
+        edge_ids=edge_ids[np.logical_and(train_mask, labels == 1)],
+        labels=labels[np.logical_and(train_mask, labels == 1)],
+        pattern_ids=pattern_ids[np.logical_and(train_mask, labels == 1)],
+    )
 
     if calibration:
         cal_data = Data(
@@ -269,8 +285,6 @@ def get_link_prediction_data(
         )
     else:
         cal_data = None
-
-    
 
     # define the new nodes sets for testing inductiveness of the model
     train_node_set = set(train_data.src_node_ids).union(train_data.dst_node_ids)
@@ -304,6 +318,22 @@ def get_link_prediction_data(
         labels=labels[val_mask],
         pattern_ids=pattern_ids[val_mask],
     )
+    val_data_normal = Data(
+        src_node_ids=src_node_ids[np.logical_and(val_mask, labels == 0)],
+        dst_node_ids=dst_node_ids[np.logical_and(val_mask, labels == 0)],
+        node_interact_times=node_interact_times[np.logical_and(val_mask, labels == 0)],
+        edge_ids=edge_ids[np.logical_and(val_mask, labels == 0)],
+        labels=labels[np.logical_and(val_mask, labels == 0)],
+        pattern_ids=pattern_ids[np.logical_and(val_mask, labels == 0)],
+    )
+    val_data_anomaly = Data(
+        src_node_ids=src_node_ids[np.logical_and(val_mask, labels == 1)],
+        dst_node_ids=dst_node_ids[np.logical_and(val_mask, labels == 1)],
+        node_interact_times=node_interact_times[np.logical_and(val_mask, labels == 1)],
+        edge_ids=edge_ids[np.logical_and(val_mask, labels == 1)],
+        labels=labels[np.logical_and(val_mask, labels == 1)],
+        pattern_ids=pattern_ids[np.logical_and(val_mask, labels == 1)],
+    )
 
     test_data = Data(
         src_node_ids=src_node_ids[test_mask],
@@ -322,6 +352,7 @@ def get_link_prediction_data(
             node_interact_times=node_interact_times[new_node_val_mask],
             edge_ids=edge_ids[new_node_val_mask],
             labels=labels[new_node_val_mask],
+            pattern_ids=pattern_ids[new_node_val_mask],
         )
 
         new_node_test_data = Data(
@@ -330,6 +361,7 @@ def get_link_prediction_data(
             node_interact_times=node_interact_times[new_node_test_mask],
             edge_ids=edge_ids[new_node_test_mask],
             labels=labels[new_node_test_mask],
+            pattern_ids=pattern_ids[new_node_test_mask],
         )
     else:
         new_node_val_data = None
@@ -380,7 +412,11 @@ def get_link_prediction_data(
         edge_raw_features,
         full_data,
         train_data,
+        train_data_normal,
+        train_data_anomaly,
         val_data,
+        val_data_normal,
+        val_data_anomaly,
         test_data,
         new_node_val_data,
         new_node_test_data,
