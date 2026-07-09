@@ -27,7 +27,10 @@ from utils.utils import (
     create_folder,
 )
 from utils.utils import get_neighbor_sampler, NegativeEdgeSampler, BASE
-from evaluation.evaluate_models_utils import evaluate_model_link_prediction
+from evaluation.evaluate_models_utils import (
+    evaluate_model_link_prediction,
+    evaluate_model_link_prediction_diffusion,
+)
 from utils.metrics import get_link_prediction_metrics
 from utils.DataLoader import get_idx_data_loader, get_link_prediction_data
 from utils.EarlyStopping import EarlyStopping
@@ -69,7 +72,7 @@ def main(args):
     # TODO: create diffusion model
     in_feat_dim = 33
     out_feat_dim = 33
-    timesteps = 50 # number of timesteps for diffusion process
+    timesteps = 200 # number of timesteps for diffusion process
     y = in_feat_dim
     diffusion = Diffusion_Cond(in_feat_dim, out_feat_dim, timesteps, y).to(
         args.device
@@ -189,6 +192,7 @@ def main(args):
 
         logger.info(f"configuration is {args}")
         # Variables for tracking loss
+        diffusion_loss_history = []
         train_loss_history = []
         val_loss_history = []
         train_loss_per_batch = []
@@ -431,6 +435,7 @@ def main(args):
                             node_ids=unique_neighbors[:, 0].astype(np.int64),
                             node_interact_times=unique_neighbors[:, 1].astype(np.float64),
                             num_neighbors=args.num_neighbors,
+                            current_layer_num=args.num_layers,
                         )
                     )[inverse_indices]
         
@@ -592,11 +597,15 @@ def main(args):
                     )
                     dif_loss.backward()
                     d_optimizer.step()
+
+                    diffusion_loss_history.append(dif_loss.item())
                 
                 # TODO: generate new embeddings
+                proportions = [0, 0.2, 0.4, 0.6, 0.8]
                 batch_generated_dst_node_embeddings = diffusion.sample(
                     batch_src_node_embeddings.shape,
                     batch_src_node_embeddings,
+                    proportions
                 )
 
                 # TODO: compute probabilities
@@ -634,13 +643,17 @@ def main(args):
                 
 
                 predicts = torch.cat(
-                    [positive_probabilities, negative_probabilities, negative_diffusion_probabilities], dim=0
+                    [
+                        positive_probabilities, 
+                        negative_probabilities, 
+                        # negative_diffusion_probabilities
+                    ], dim=0
                 )
                 labels = torch.cat(
                     [
                         torch.ones_like(positive_probabilities),
                         torch.zeros_like(negative_probabilities),
-                        torch.zeros_like(negative_diffusion_probabilities),
+                        # torch.zeros_like(negative_diffusion_probabilities),
                     ],
                     dim=0,
                 )
@@ -676,7 +689,7 @@ def main(args):
             epoch_train_loss = np.mean(train_losses)
             train_loss_history.append(epoch_train_loss)
 
-            val_losses, val_metrics, val_batch_losses = evaluate_model_link_prediction(
+            val_losses, val_metrics, val_batch_losses, val_metrics_by_negative_source = evaluate_model_link_prediction_diffusion(
                 model_name=args.model_name,
                 model=model,
                 neighbor_sampler=full_neighbor_sampler,
@@ -688,6 +701,8 @@ def main(args):
                 time_gap=args.time_gap,
                 temp=args.temperature,
                 return_batch_losses=True,
+                diffusion_model=diffusion,
+                return_detailed_metrics=True,
             )
 
             val_loss_per_batch.extend(val_batch_losses)
@@ -741,6 +756,20 @@ def main(args):
                 logger.info(
                     f"validate {metric_name}, {np.mean([val_metric[metric_name] for val_metric in val_metrics]):.4f}"
                 )
+            if isinstance(val_batch_losses, list) and len(val_batch_losses) == 0:
+                val_batch_losses = val_losses
+            if len(val_metrics) > 0 and isinstance(val_metrics[0], dict):
+                for metric_name in val_metrics[0].keys():
+                    logger.info(
+                        f"validate overall {metric_name}, {np.mean([val_metric[metric_name] for val_metric in val_metrics]):.4f}"
+                    )
+            for negative_name, negative_metrics in val_metrics_by_negative_source.items():
+                if not negative_metrics:
+                    continue
+                for metric_name in negative_metrics[0].keys():
+                    logger.info(
+                        f"validate {negative_name} {metric_name}, {np.mean([metric[metric_name] for metric in negative_metrics]):.4f}"
+                    )
             if args.inductive:
                 logger.info(f"new node validate loss: {np.mean(new_node_val_losses):.4f}")
                 for metric_name in new_node_val_metrics[0].keys():
@@ -892,6 +921,52 @@ def main(args):
             bbox_inches="tight",
         )
         plt.close()
+
+        diffusion_save_path = f"{save_model_folder}/{args.save_model_name}_diffusion.pt"
+        torch.save(diffusion.state_dict(), diffusion_save_path)
+        logger.info(f"Saved diffusion model to {diffusion_save_path}")
+
+        # Save diffusion loss evolution and CSV (if there are recorded diffusion losses)
+        if len(diffusion_loss_history) > 0:
+            kernel_size_diff = min(1000, len(diffusion_loss_history))
+            if kernel_size_diff >= 3:
+                diffusion_loss_smoothed = median_filter(diffusion_loss_history, size=kernel_size_diff)
+            else:
+                diffusion_loss_smoothed = diffusion_loss_history
+
+            # Save CSV
+            df_diffusion_loss = pd.DataFrame(
+                {
+                    "iter": range(1, len(diffusion_loss_history) + 1),
+                    "raw_loss": diffusion_loss_history,
+                    "smoothed_loss": diffusion_loss_smoothed,
+                }
+            )
+            df_diffusion_loss.to_csv(
+                f"{loss_save_folder}/diffusion_loss_per_batch_run_{run}.csv", index=False
+            )
+
+            # Save plot
+            plt.figure(figsize=(12, 6))
+            iters = range(1, len(diffusion_loss_history) + 1)
+            plt.plot(iters, diffusion_loss_history, label="Diffusion Loss (raw)", alpha=0.3)
+            plt.plot(iters, diffusion_loss_smoothed, label="Diffusion Loss (smoothed)", linewidth=2)
+            plt.xlabel("Iteration")
+            plt.ylabel("Diffusion Loss")
+            plt.title(f"Diffusion Loss Evolution - {args.model_name} on {args.dataset_name} (Run {run + 1})")
+            plt.legend()
+            plt.grid(True, alpha=0.3)
+            plt.tight_layout()
+            plt.savefig(
+                f"{loss_save_folder}/diffusion_loss_evolution_run_{run}.png",
+                dpi=300,
+                bbox_inches="tight",
+            )
+            plt.close()
+
+        diffusion_save_path = f"{save_model_folder}/{args.save_model_name}_diffusion.pt"
+        torch.save(diffusion.state_dict(), diffusion_save_path)
+        logger.info(f"Saved diffusion model to {diffusion_save_path}")
 
         logger.info(f"Single epoch loss data and plots saved in {loss_save_folder}")
         logger.info(
