@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from preprocessing.extract_all_anomaly import add_anomaly_whole_in_train_val, extract_whole_anomaly
+from preprocessing.extract_all_anomaly import add_anomaly_whole_in_train_val, extract_whole_anomaly, add_anomaly_nodes_in_train_val
 
 try:
     from utils.utils import period, round_duration, save_pkl, open_config, BASE
@@ -1005,6 +1005,6 @@ def main(clients, start_val, start_test):
         # results.to_csv(f"{BASE}/processed_data/optc_{client}/metapath.csv", index=False)
         anomalies = extract_whole_anomaly(client, start_test)
         anomalies.to_csv(f"{BASE}/processed_data/optc_{client}/anomalies.csv", index=False)
-        edge_list, edge_features = add_anomaly_whole_in_train_val(anomalies, client, start_val, start_test)
+        edge_list, edge_features = add_anomaly_nodes_in_train_val(anomalies, client, start_val, start_test)
         edge_list.to_csv(f"{BASE}/processed_data/optc_{client}/ml_optc_{client}.csv", index=False)
         edge_features.to_csv(f"{BASE}/processed_data/optc_{client}/edge_features.csv", index=False)

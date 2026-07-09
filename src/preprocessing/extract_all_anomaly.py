@@ -230,6 +230,118 @@ def add_anomaly_whole_in_train_val(anomalies, client, start_val, start_test):
     )
 
     return edge_list, edge_features
+
+
+
+def add_anomaly_nodes_in_train_val(anomalies, client, start_val, start_test):
+    """Inject anomalous edges into the train/validation split without sliding windows.
+
+    The function samples a portion of the historical edges, then inserts the
+    anomalous edges using their original node and temporal structure. It also
+    appends matching edge-feature rows so the resulting dataframes stay aligned.
+    """
+    _ = dt.datetime.strptime(start_val, "%Y-%m-%dT%H:%M").timestamp()
+    test_time = dt.datetime.strptime(start_test, "%Y-%m-%dT%H:%M").timestamp()
+
+    node_feature_file_path = f"{BASE}/processed_data/optc_{client}/node_features.csv"
+    node_features = pd.read_csv(node_feature_file_path, header=0)
+    edge_feature_file_path = f"{BASE}/processed_data/optc_{client}/edge_features.csv"
+    edge_features = pd.read_csv(edge_feature_file_path, header=0)
+    edge_list_file_path = f"{BASE}/processed_data/optc_{client}/ml_optc_{client}.csv"
+    edge_list = pd.read_csv(edge_list_file_path, header=0)
+
+    node_features["idx"] = node_features.index
+    edge_features["idx"] = edge_features.index
+
+    
+
+    if "command_line" in edge_features.columns:
+        edge_features["command_line"] = edge_features["command_line"].apply(normalize_cmdline)
+
+    train_val_edges = edge_list[edge_list["ts"] < test_time].copy()
+
+    if anomalies is None or anomalies.empty or train_val_edges.empty:
+        return edge_list, edge_features
+    
+    anomaly_ratio = 1
+    num_max_anomalies = int(len(train_val_edges) * anomaly_ratio)
+    if num_max_anomalies <= 0:
+        return edge_list, edge_features
+
+    new_edge_list = []
+    new_edge_features = []
+    edge_list_columns = edge_list.columns.tolist()
+    feature_columns = edge_features.columns.tolist()
+
+
+    id_pattern = 0
+
+    # substract min timestamp from all frames to keep the relative temporal structure
+    anomalies["ts"] = anomalies["ts"] - anomalies["ts"].min()
+
+    while len(new_edge_list) < num_max_anomalies:
+        if id_pattern % 100 == 0:
+            print(f"Injected {len(new_edge_list)} anomalies out of {num_max_anomalies} (pattern_id={id_pattern})")
+        id_pattern += 1
+
+        # sample one edge from the train/validation edges to use as a base timestamp for the new edges
+        base_ts = train_val_edges.sample(n=1).iloc[0]["ts"]
+
+
+        for idx, anomaly in anomalies.iterrows():
+            if "u" not in anomaly.index or "i" not in anomaly.index:
+                continue
+
+            ano_start_node = int(anomaly["u"])
+            ano_end_node = int(anomaly["i"])
+            ano_ts = float(anomaly.get("ts", base_ts))
+
+            if ano_ts + base_ts >= test_time:
+                continue
+            
+
+            new_edge = {}
+            new_edge.update(
+                {
+                    "u": ano_start_node,
+                    "i": ano_end_node,
+                    "ts": ano_ts + base_ts,
+                    "label": 1,
+                    "pattern_id": id_pattern,
+                }
+            )
+            new_edge_list.append(new_edge)
+
+            feature_row = {col: np.nan for col in feature_columns}
+            feature_row.update(
+                {
+                    "action_type": anomaly.get("action_type", np.nan),
+                    "command_line": anomaly.get("command_line", np.nan),
+                }
+            )
+            new_edge_features.append(feature_row)
+
+    if not new_edge_list:
+        return edge_list, edge_features
+
+    edge_list = pd.concat([edge_list, pd.DataFrame(new_edge_list)], ignore_index=True, sort=False)
+    edge_features = pd.concat([edge_features, pd.DataFrame(new_edge_features)], ignore_index=True, sort=False)
+
+    edge_list["_original_row"] = np.arange(len(edge_list)) + 1
+    edge_list = edge_list.sort_values(by="ts", kind="mergesort").reset_index(drop=True)
+
+    edge_features = edge_features.loc[edge_list["_original_row"]].reset_index(drop=True)
+    edge_list = edge_list.drop(columns=["_original_row"])
+
+    edge_list["idx"] = edge_list.index + 1
+    edge_features = edge_features.drop(columns=["idx"])
+    edge_features = pd.concat(
+        [pd.DataFrame([{"action_type": np.nan, "command_line": np.nan}]), edge_features],
+        ignore_index=True,
+        sort=False,
+    )
+
+    return edge_list, edge_features    
     
 def group_node_by_type_and_ts(node_features, edge_list, time_col="ts", window_minutes=15):
     """Group nodes by src or dst, their object type and by 15 minutes sliding windows."""

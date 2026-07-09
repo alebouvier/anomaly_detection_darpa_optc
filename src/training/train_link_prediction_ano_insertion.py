@@ -42,7 +42,11 @@ def main(args):
         edge_raw_features,
         full_data,
         train_data,
+        train_data_normal,
+        train_data_anomaly,
         val_data,
+        val_data_normal,
+        val_data_anomaly,
         test_data,
         new_node_val_data,
         new_node_test_data,
@@ -103,13 +107,23 @@ def main(args):
 
 
     # get data loaders
-    train_idx_data_loader = get_idx_data_loader(
-        indices_list=list(range(len(train_data.edge_ids))),
+    train_idx_data_loader_normal = get_idx_data_loader(
+        indices_list=list(range(len(train_data_normal.edge_ids))),
         batch_size=args.batch_size,
         shuffle=False,
     )
-    val_idx_data_loader = get_idx_data_loader(
-        indices_list=list(range(len(val_data.src_node_ids))),
+    train_idx_data_loader_anomaly = get_idx_data_loader(
+        indices_list=list(range(len(train_data_anomaly.edge_ids))),
+        batch_size=args.batch_size,
+        shuffle=False,
+    )
+    val_idx_data_loader_normal = get_idx_data_loader(
+        indices_list=list(range(len(val_data_normal.edge_ids))),
+        batch_size=args.batch_size,
+        shuffle=False,
+    )
+    val_idx_data_loader_anomaly = get_idx_data_loader(
+        indices_list=list(range(len(val_data_anomaly.edge_ids))),
         batch_size=args.batch_size,
         shuffle=False,
     )
@@ -294,21 +308,26 @@ def main(args):
 
             # store train losses and metrics
             train_losses, train_metrics = [], []
-            train_idx_data_loader_tqdm = tqdm(
-                train_idx_data_loader, ncols=120, mininterval=2
+            train_idx_data_loader_normal_tqdm = tqdm(
+                train_idx_data_loader_normal, ncols=120, mininterval=2
+            )
+            train_idx_data_loader_anomaly_tqdm = tqdm(
+                train_idx_data_loader_anomaly, ncols=120, mininterval=2
             )
             nb_normal_edges_sampled = 0
             nb_anomalous_edges_sampled = 0
             nb_random_edges_sampled = 0
-            for batch_idx, train_data_indices in enumerate(train_idx_data_loader_tqdm):
-                train_data_indices = train_data_indices.numpy()
+            for batch_idx, (normal_train_data_indices, ano_train_data_indices) in enumerate(zip(train_idx_data_loader_normal_tqdm, train_idx_data_loader_anomaly_tqdm)):
+                normal_train_data_indices = normal_train_data_indices.numpy()
+                ano_train_data_indices = ano_train_data_indices.numpy()
                 # keep train_data_indices for which the label is zero
-                normal_train_data_indices = train_data_indices[train_data.labels[train_data_indices] == 0]
-                ano_train_data_indices = train_data_indices[train_data.labels[train_data_indices] == 1]
 
-                if len(normal_train_data_indices) == 0 or len(ano_train_data_indices) == 0:
-                    continue
 
+                # sample 2% of training indices
+                # if len(normal_train_data_indices) > 0:
+                #     sample_size = max(1, int(0.05 * len(normal_train_data_indices)))
+                #     normal_train_data_indices = np.random.choice(normal_train_data_indices, size=sample_size, replace=False)
+                
                 (
                     batch_src_node_ids,
                     batch_dst_node_ids,
@@ -317,12 +336,12 @@ def main(args):
                     batch_labels,
                     batch_pattern_ids,
                 ) = (
-                    train_data.src_node_ids[normal_train_data_indices],
-                    train_data.dst_node_ids[normal_train_data_indices],
-                    train_data.node_interact_times[normal_train_data_indices],
-                    train_data.edge_ids[normal_train_data_indices],
-                    train_data.labels[normal_train_data_indices],
-                    train_data.pattern_ids[normal_train_data_indices],
+                    train_data_normal.src_node_ids[normal_train_data_indices],
+                    train_data_normal.dst_node_ids[normal_train_data_indices],
+                    train_data_normal.node_interact_times[normal_train_data_indices],
+                    train_data_normal.edge_ids[normal_train_data_indices],
+                    train_data_normal.labels[normal_train_data_indices],
+                    train_data_normal.pattern_ids[normal_train_data_indices],
                 )
 
                 (
@@ -333,32 +352,13 @@ def main(args):
                     batch_ano_labels,
                     batch_ano_pattern_ids,
                 ) = (
-                    train_data.src_node_ids[ano_train_data_indices],
-                    train_data.dst_node_ids[ano_train_data_indices],
-                    train_data.node_interact_times[ano_train_data_indices],
-                    train_data.edge_ids[ano_train_data_indices],
-                    train_data.labels[ano_train_data_indices],
-                    train_data.pattern_ids[ano_train_data_indices],
+                    train_data_anomaly.src_node_ids[ano_train_data_indices],
+                    train_data_anomaly.dst_node_ids[ano_train_data_indices],
+                    train_data_anomaly.node_interact_times[ano_train_data_indices],
+                    train_data_anomaly.edge_ids[ano_train_data_indices],
+                    train_data_anomaly.labels[ano_train_data_indices],
+                    train_data_anomaly.pattern_ids[ano_train_data_indices],
                 )
-
-                if len(batch_src_node_ids) < len(batch_ano_src_node_ids):
-                    # repeat the normal edges to match the number of anomalous edges
-                    repeat_factor = len(batch_ano_src_node_ids) // len(batch_src_node_ids) + 1
-                    batch_src_node_ids = np.tile(batch_src_node_ids, repeat_factor)
-                    batch_dst_node_ids = np.tile(batch_dst_node_ids, repeat_factor)
-                    batch_node_interact_times = np.tile(batch_node_interact_times, repeat_factor)
-                    batch_edge_ids = np.tile(batch_edge_ids, repeat_factor)
-                    batch_labels = np.tile(batch_labels, repeat_factor)
-                    batch_pattern_ids = np.tile(batch_pattern_ids, repeat_factor)
-                elif len(batch_src_node_ids) > len(batch_ano_src_node_ids):
-                    # repeat the anomalous edges to match the number of normal edges
-                    repeat_factor = len(batch_src_node_ids) // len(batch_ano_src_node_ids) + 1
-                    batch_ano_src_node_ids = np.tile(batch_ano_src_node_ids, repeat_factor)
-                    batch_ano_dst_node_ids = np.tile(batch_ano_dst_node_ids, repeat_factor)
-                    batch_ano_node_interact_times = np.tile(batch_ano_node_interact_times, repeat_factor)
-                    batch_ano_edge_ids = np.tile(batch_ano_edge_ids, repeat_factor)
-                    batch_ano_labels = np.tile(batch_ano_labels, repeat_factor)
-                    batch_ano_pattern_ids = np.tile(batch_ano_pattern_ids, repeat_factor)
 
                 neg_edge_sample_size = max(0, len(batch_src_node_ids) - len(batch_ano_src_node_ids))
 
@@ -464,24 +464,14 @@ def main(args):
                 elif args.model_name in ["DyGFormer"]:
                     # get temporal embedding of source and destination nodes
                     # two Tensors, with shape (batch_size, node_feat_dim)
-                    if len(batch_src_node_ids) > 0:
-                        batch_src_node_embeddings, batch_dst_node_embeddings = model[
-                            0
-                        ].compute_src_dst_node_temporal_embeddings(
-                            src_node_ids=batch_src_node_ids,
-                            dst_node_ids=batch_dst_node_ids,
-                            node_interact_times=batch_node_interact_times,
-                            node_pattern_ids=batch_pattern_ids,
-                        )
-                    else:
-                        batch_src_node_embeddings = torch.empty(
-                            (0, node_raw_features.shape[1]),
-                            device=node_raw_features.device,
-                        )
-                        batch_dst_node_embeddings = torch.empty(
-                            (0, node_raw_features.shape[1]),
-                            device=node_raw_features.device,
-                        )
+                    batch_src_node_embeddings, batch_dst_node_embeddings = model[
+                        0
+                    ].compute_src_dst_node_temporal_embeddings(
+                        src_node_ids=batch_src_node_ids,
+                        dst_node_ids=batch_dst_node_ids,
+                        node_interact_times=batch_node_interact_times,
+                        node_pattern_ids=batch_pattern_ids,
+                    )
 
                     # get temporal embedding of negative source and negative destination nodes
                     # two Tensors, with shape (batch_size, node_feat_dim)
@@ -577,7 +567,7 @@ def main(args):
                 optimizer.step()
 
                 if batch_idx % 1000 == 0:
-                    train_idx_data_loader_tqdm.set_description(
+                    train_idx_data_loader_normal_tqdm.set_description(
                         f"evaluate for the {batch_idx + 1}-th batch, evaluate loss: {loss.item()}"
                     )
                 train_loss_per_batch.append(loss.item())
@@ -599,9 +589,11 @@ def main(args):
                 model_name=args.model_name,
                 model=model,
                 neighbor_sampler=full_neighbor_sampler,
-                evaluate_idx_data_loader=val_idx_data_loader,
+                evaluate_idx_data_loader_normal=val_idx_data_loader_normal,
+                evaluate_idx_data_loader_anomaly=val_idx_data_loader_anomaly,
                 evaluate_neg_edge_sampler=val_neg_edge_sampler,
-                evaluate_data=val_data,
+                evaluate_data_normal=val_data_normal,
+                evaluate_data_anomaly=val_data_anomaly,
                 loss_func=loss_func,
                 num_neighbors=args.num_neighbors,
                 time_gap=args.time_gap,

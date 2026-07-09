@@ -40,7 +40,11 @@ def main(args):
         edge_raw_features,
         full_data,
         train_data,
+        train_data_normal,
+        train_data_anomaly,
         val_data,
+        val_data_normal,
+        val_data_anomaly,
         test_data,
         new_node_val_data,
         new_node_test_data,
@@ -100,11 +104,17 @@ def main(args):
         )
 
     # get data loaders
-    val_idx_data_loader = get_idx_data_loader(
-        indices_list=list(range(len(val_data.src_node_ids))),
+    val_idx_data_loader_normal = get_idx_data_loader(
+        indices_list=list(range(len(val_data_normal.src_node_ids))),
         batch_size=args.batch_size,
         shuffle=False,
     )
+    val_idx_data_loader_anomaly = get_idx_data_loader(
+        indices_list=list(range(len(val_data_anomaly.src_node_ids))),
+        batch_size=args.batch_size,
+        shuffle=False,
+    )
+
     test_idx_data_loader = get_idx_data_loader(
         indices_list=list(range(len(test_data.src_node_ids))),
         batch_size=args.batch_size,
@@ -312,9 +322,11 @@ def main(args):
                     model_name=args.model_name,
                     model=model,
                     neighbor_sampler=full_neighbor_sampler,
-                    evaluate_idx_data_loader=val_idx_data_loader,
+                    evaluate_idx_data_loader_normal=val_idx_data_loader_normal,
+                    evaluate_idx_data_loader_anomaly=val_idx_data_loader_anomaly,
                     evaluate_neg_edge_sampler=val_neg_edge_sampler,
-                    evaluate_data=val_data,
+                    evaluate_data_normal=val_data_normal,
+                    evaluate_data_anomaly=val_data_anomaly,
                     loss_func=loss_func,
                     num_neighbors=args.num_neighbors,
                     time_gap=args.time_gap,

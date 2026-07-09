@@ -297,9 +297,11 @@ def evaluate_model_link_prediction_ano_insertion(
     model_name: str,
     model: nn.Module,
     neighbor_sampler: NeighborSampler,
-    evaluate_idx_data_loader: DataLoader,
+    evaluate_idx_data_loader_normal: DataLoader,
+    evaluate_idx_data_loader_anomaly: DataLoader,
     evaluate_neg_edge_sampler: NegativeEdgeSampler,
-    evaluate_data: Data,
+    evaluate_data_normal: Data,
+    evaluate_data_anomaly: Data,
     loss_func: nn.Module,
     num_neighbors: int = 20,
     time_gap: int = 2000,
@@ -337,15 +339,17 @@ def evaluate_model_link_prediction_ano_insertion(
         all_predicted_links = []  # (src, dst, score)
         all_actual_links = []  # (src, dst, label)
         non_existant_links = []
-        evaluate_idx_data_loader_tqdm = tqdm(
-            evaluate_idx_data_loader, ncols=120, mininterval=120
+        evaluate_idx_data_loader_normal_tqdm = tqdm(
+            evaluate_idx_data_loader_normal, ncols=120, mininterval=120
         )
-        for batch_idx, evaluate_data_indices in enumerate(
-            evaluate_idx_data_loader_tqdm
+        evaluate_idx_data_loader_anomaly_tqdm = tqdm(
+            evaluate_idx_data_loader_anomaly, ncols=120, mininterval=120
+        )
+        for batch_idx, (normal_evaluate_data_indices, ano_evaluate_data_indices) in enumerate(zip(
+            evaluate_idx_data_loader_normal_tqdm, evaluate_idx_data_loader_anomaly_tqdm)
         ):
-            evaluate_data_indices = evaluate_data_indices.numpy()
-            normal_evaluate_data_indices = evaluate_data_indices[evaluate_data.labels[evaluate_data_indices] == 0]
-            ano_evaluate_data_indices = evaluate_data_indices[evaluate_data.labels[evaluate_data_indices] == 1]
+            normal_evaluate_data_indices = normal_evaluate_data_indices.numpy()
+            ano_evaluate_data_indices = ano_evaluate_data_indices.numpy()
             
             (
                 batch_src_node_ids,
@@ -355,12 +359,12 @@ def evaluate_model_link_prediction_ano_insertion(
                 batch_labels,
                 batch_pattern_ids,
             ) = (
-                evaluate_data.src_node_ids[normal_evaluate_data_indices],
-                evaluate_data.dst_node_ids[normal_evaluate_data_indices],
-                evaluate_data.node_interact_times[normal_evaluate_data_indices],
-                evaluate_data.edge_ids[normal_evaluate_data_indices],
-                evaluate_data.labels[normal_evaluate_data_indices],
-                evaluate_data.pattern_ids[normal_evaluate_data_indices],
+                evaluate_data_normal.src_node_ids[normal_evaluate_data_indices],
+                evaluate_data_normal.dst_node_ids[normal_evaluate_data_indices],
+                evaluate_data_normal.node_interact_times[normal_evaluate_data_indices],
+                evaluate_data_normal.edge_ids[normal_evaluate_data_indices],
+                evaluate_data_normal.labels[normal_evaluate_data_indices],
+                evaluate_data_normal.pattern_ids[normal_evaluate_data_indices],
             )
 
             (
@@ -371,12 +375,12 @@ def evaluate_model_link_prediction_ano_insertion(
                 batch_ano_labels,
                 batch_ano_pattern_ids,
             ) = (
-                evaluate_data.src_node_ids[ano_evaluate_data_indices],
-                evaluate_data.dst_node_ids[ano_evaluate_data_indices],
-                evaluate_data.node_interact_times[ano_evaluate_data_indices],
-                evaluate_data.edge_ids[ano_evaluate_data_indices],
-                evaluate_data.labels[ano_evaluate_data_indices],
-                evaluate_data.pattern_ids[ano_evaluate_data_indices],
+                evaluate_data_anomaly.src_node_ids[ano_evaluate_data_indices],
+                evaluate_data_anomaly.dst_node_ids[ano_evaluate_data_indices],
+                evaluate_data_anomaly.node_interact_times[ano_evaluate_data_indices],
+                evaluate_data_anomaly.edge_ids[ano_evaluate_data_indices],
+                evaluate_data_anomaly.labels[ano_evaluate_data_indices],
+                evaluate_data_anomaly.pattern_ids[ano_evaluate_data_indices],
             )
 
             neg_edge_sample_size = max(0, len(batch_src_node_ids) - len(batch_ano_src_node_ids))
@@ -402,7 +406,6 @@ def evaluate_model_link_prediction_ano_insertion(
             batch_neg_node_interact_times = np.array([], dtype=np.float32)
             batch_neg_labels = np.array([], dtype=np.int64)
             batch_neg_pattern_ids = np.array([], dtype=np.int64)
-
                 
 
             if len(batch_ano_src_node_ids) > 0:
@@ -411,7 +414,6 @@ def evaluate_model_link_prediction_ano_insertion(
                 batch_neg_node_interact_times = np.concatenate([batch_neg_node_interact_times, batch_ano_node_interact_times])
                 batch_neg_labels = np.concatenate([batch_neg_labels, batch_ano_labels])
                 batch_neg_pattern_ids = np.concatenate([batch_neg_pattern_ids, batch_ano_pattern_ids])
-
 
 
             # we need to compute for positive and negative edges respectively, because the new sampling strategy (for evaluation) allows the negative source nodes to be
@@ -559,7 +561,7 @@ def evaluate_model_link_prediction_ano_insertion(
             )
 
             if batch_idx % 1000 == 0:
-                evaluate_idx_data_loader_tqdm.set_description(
+                evaluate_idx_data_loader_normal_tqdm.set_description(
                     f"evaluate for the {batch_idx + 1}-th batch, evaluate loss: {loss.item()}"
                 )
 
