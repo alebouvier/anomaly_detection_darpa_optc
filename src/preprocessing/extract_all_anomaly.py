@@ -380,3 +380,81 @@ def group_node_by_type_and_ts(node_features, edge_list, time_col="ts", window_mi
                     nodes_by_type_and_ts[("dst", obj_type, ts)].append(node)
 
     return nodes_by_type_and_ts
+
+
+def deconnect_test_anomaly(client, start_val, start_test):
+
+    val_time = dt.datetime.strptime(start_val, "%Y-%m-%dT%H:%M").timestamp()
+    test_time = dt.datetime.strptime(start_test, "%Y-%m-%dT%H:%M").timestamp()
+
+    node_feature_file_path = f"{BASE}/processed_data/optc_{client}/node_features.csv"
+    node_features = pd.read_csv(node_feature_file_path, header=0)
+    edge_feature_file_path = f"{BASE}/processed_data/optc_{client}/edge_features.csv"
+    edge_features = pd.read_csv(edge_feature_file_path, header=0)
+    edge_list_file_path = f"{BASE}/processed_data/optc_{client}/ml_optc_{client}.csv"
+    edge_list = pd.read_csv(edge_list_file_path, header=0)
+
+    anomaly_list = edge_list[(edge_list["ts"] >= test_time) & (edge_list["label"] == 1)]
+    normal_train_list = edge_list[(edge_list["ts"] < val_time) & (edge_list["label"] == 0)]
+
+
+    anomalous_nodes = np.unique(np.concat([anomaly_list["u"].to_numpy(), anomaly_list["i"].to_numpy()]))
+    normal_train_nodes = np.unique(np.concat([normal_train_list["u"].to_numpy(), normal_train_list['i'].to_numpy()]))
+
+    ano_nodes_not_in_train = np.setdiff1d(anomalous_nodes, normal_train_nodes)
+
+    edges_to_remove = []
+    for idx, edge in edge_list[(edge_list["ts"] >= test_time)].iterrows():
+        src_node = edge["u"]
+        dst_node = edge["i"]
+
+        if (src_node in ano_nodes_not_in_train and dst_node not in ano_nodes_not_in_train) or (src_node not in ano_nodes_not_in_train and dst_node in ano_nodes_not_in_train):
+            edges_to_remove.append(idx)
+    
+    print(f"{len(edges_to_remove)} edges removed")
+    
+    edge_list.drop(edges_to_remove, axis=0)
+
+    return edge_list
+
+def stats_test_anomaly(client, start_val, start_test):
+
+    val_time = dt.datetime.strptime(start_val, "%Y-%m-%dT%H:%M").timestamp()
+    test_time = dt.datetime.strptime(start_test, "%Y-%m-%dT%H:%M").timestamp()
+
+    node_feature_file_path = f"{BASE}/processed_data/optc_{client}/node_features.csv"
+    node_features = pd.read_csv(node_feature_file_path, header=0)
+    edge_feature_file_path = f"{BASE}/processed_data/optc_{client}/edge_features.csv"
+    edge_features = pd.read_csv(edge_feature_file_path, header=0)
+    edge_list_file_path = f"{BASE}/processed_data/optc_{client}/ml_optc_{client}.csv"
+    edge_list = pd.read_csv(edge_list_file_path, header=0)
+
+    anomaly_list = edge_list[(edge_list["ts"] >= test_time) & (edge_list["label"] == 1)]
+    normal_test_list = edge_list[(edge_list["ts"] >= test_time) & (edge_list["label"] == 0)]
+    normal_train_list = edge_list[(edge_list["ts"] < val_time) & (edge_list["label"] == 0)]
+
+
+    anomalous_nodes = np.unique(np.concat([anomaly_list["u"].to_numpy(), anomaly_list["i"].to_numpy()]))
+    normal_train_nodes = np.unique(np.concat([normal_train_list["u"].to_numpy(), normal_train_list['i'].to_numpy()]))
+    normal_test_nodes = np.unique(np.concat([normal_test_list["u"].to_numpy(), normal_test_list['i'].to_numpy()]))
+
+    ano_nodes_not_in_train = np.setdiff1d(anomalous_nodes, normal_train_nodes)
+    ano_nodes_not_in_test =  np.setdiff1d(anomalous_nodes, normal_test_nodes)
+    test_nodes_not_in_train = np.setdiff1d(normal_test_nodes, normal_train_nodes)
+    
+    ano_nodes_in_train_not_in_test = np.setdiff1d(ano_nodes_not_in_test, ano_nodes_not_in_train)
+
+
+
+    print(f"n normal train edges: {len(normal_train_list)}")
+    print(f"n normal test edges: {len(normal_test_list)}")
+    print(f"n anomalous edges: {len(anomaly_list)}")
+    print(f"n normal train nodes: {len(normal_train_nodes)}")
+    print(f"n normal test nodes: {len(normal_test_nodes)}")
+    print(f"n anomalous nodes: {len(anomalous_nodes)}")
+    print(f"n anomalous nodes not in normal train nodes: {len(ano_nodes_not_in_train)}")
+    print(f"n anomalous not in normal test nodes: {len(ano_nodes_not_in_test)}")
+    print(f"n normal test nodes not in train nodes: {len(test_nodes_not_in_train)}")
+    print(f"n anomalous nodes in train not in test: {len(ano_nodes_in_train_not_in_test)}")
+
+    return edge_list

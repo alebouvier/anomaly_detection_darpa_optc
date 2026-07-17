@@ -6,6 +6,7 @@ from utils.load_configs import get_link_prediction_args
 from preprocessing.logs_analysis import main as analyse_log
 from preprocessing.preprocessing_data import main as test_preproc
 from preprocessing.temporal_patterns import main as temporal_patterns
+from preprocessing.visualisation import main as visualisation
 from features.w2v import main as training_w2v
 from features.extract_features import main as extract_features
 from features.train_bert128 import main as train_bert128
@@ -83,6 +84,24 @@ if __name__ == "__main__":
         "--aggregation", action="store_true", help="whether or not aggregate timestamps"
     )
 
+    parser.add_argument(
+        "--model_name",
+        type=str,
+        default="GraphMixer",
+        help="name of the model, note that EdgeBank is only applicable for evaluation",
+        choices=[
+            "JODIE",
+            "DyRep",
+            "TGAT",
+            "TGN",
+            "CAWN",
+            "EdgeBank",
+            "TCL",
+            "GraphMixer",
+            "DyGFormer",
+        ],
+    )
+
     args = parser.parse_known_args()[0]
 
     try:
@@ -138,6 +157,9 @@ if __name__ == "__main__":
 
             elif task == "feature_bert":
                 extract_features(dataset, clients, model_type="bert")
+
+            elif task == "visualisation":
+                visualisation(clients, args.model_name)
 
             elif task == "train_link_prediction":
                 train_link_prediction_args = get_link_prediction_args(is_evaluation=False)
