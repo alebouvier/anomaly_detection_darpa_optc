@@ -190,6 +190,11 @@ def main(args):
         loss_save_folder = f"{args.experiment_folder}/loss"
         create_folder(loss_save_folder)
 
+        temporal_embeddings_folder = f"{BASE}/temporal_embeddings_data/{args.dataset_name}/{args.model_name.lower()}/train"
+        create_folder(temporal_embeddings_folder)
+        run_temporal_embeddings = []
+        run_negative_temporal_embeddings = []
+
         # create model
         if args.model_name == "TGAT":
             dynamic_backbone = TGAT(
@@ -409,6 +414,8 @@ def main(args):
                     batch_historical_ratios.append(0.0)
                 global_random_edges += num_random_sample_edges
 
+
+
                 # we need to compute for positive and negative edges respectively, because the new sampling strategy (for evaluation) allows the negative source nodes to be
                 # different from the source nodes, this is different from previous works that just replace destination nodes with negative destination nodes
                 if args.model_name in ["TGAT", "CAWN", "TCL"]:
@@ -523,6 +530,28 @@ def main(args):
                     )
                 else:
                     raise ValueError(f"Wrong value for model_name {args.model_name}!")
+                
+                run_temporal_embeddings.append(
+                    {
+                        "edge_ids": np.asarray(batch_edge_ids),
+                        "src_node_ids": np.asarray(batch_src_node_ids),
+                        "dst_node_ids": np.asarray(batch_dst_node_ids),
+                        "node_interact_times": np.asarray(batch_node_interact_times),
+                        "src_temporal_embeddings": batch_src_node_embeddings.detach().cpu(),
+                        "dst_temporal_embeddings": batch_dst_node_embeddings.detach().cpu(),
+                    }
+                )
+                run_negative_temporal_embeddings.append(
+                    {
+                        "neg_edge_ids": np.asarray(batch_edge_ids),
+                        "neg_src_node_ids": np.asarray(batch_neg_src_node_ids),
+                        "neg_dst_node_ids": np.asarray(batch_neg_dst_node_ids),
+                        "node_interact_times": np.asarray(batch_node_interact_times),
+                        "neg_src_temporal_embeddings": batch_neg_src_node_embeddings.detach().cpu(),
+                        "neg_dst_temporal_embeddings": batch_neg_dst_node_embeddings.detach().cpu(),
+                    }
+                )
+
                 # get positive and negative probabilities, shape (batch_size, )
                 positive_probabilities = (
                     model[1](
@@ -698,6 +727,21 @@ def main(args):
 
             if early_stop:
                 break
+
+        temporal_embeddings_path = (
+            f"{temporal_embeddings_folder}/temporal_embeddings.pt"
+        )
+        negative_temporal_embeddings_path = (
+            f"{temporal_embeddings_folder}/negative_temporal_embeddings.pt"
+        )
+        torch.save(run_temporal_embeddings, temporal_embeddings_path)
+        torch.save(run_negative_temporal_embeddings, negative_temporal_embeddings_path)
+        logger.info(
+            f"Saved temporal embeddings for source and destination nodes to {temporal_embeddings_path}"
+        )
+        logger.info(
+            f"Saved temporal embeddings for negative samples to {negative_temporal_embeddings_path}"
+        )
 
         kernel_size = min(1000, len(train_loss_per_batch))
         if kernel_size >= 3:
