@@ -11,7 +11,7 @@ import json
 
 from models.EdgeBank import edge_bank_link_prediction
 from utils.metrics import get_link_prediction_metrics, get_node_classification_metrics
-from utils.utils import set_random_seed
+from utils.utils import set_random_seed, create_folder
 from utils.utils import NegativeEdgeSampler, NeighborSampler
 from utils.DataLoader import Data
 
@@ -29,6 +29,8 @@ def evaluate_model_link_prediction(
     full_return: bool = False,
     temp: int = 1,
     return_batch_losses: bool = False,
+    save_temporal_embeddings: bool = False,
+    temporal_embeddings_dir: str | None = None,
 ):
     """
     evaluate models on the link prediction task
@@ -52,6 +54,11 @@ def evaluate_model_link_prediction(
         model[0].set_neighbor_sampler(neighbor_sampler)
 
     model.eval()
+
+    if save_temporal_embeddings:
+        create_folder(temporal_embeddings_dir)
+        run_temporal_embeddings = []
+        run_negative_temporal_embeddings = []
 
     with torch.no_grad():
         # store evaluate losses and metrics
@@ -206,6 +213,28 @@ def evaluate_model_link_prediction(
             else:
                 raise ValueError(f"Wrong value for model_name {model_name}!")
 
+            if save_temporal_embeddings:
+                run_temporal_embeddings.append(
+                    {
+                        "edge_ids": np.asarray(batch_edge_ids),
+                        "src_node_ids": np.asarray(batch_src_node_ids),
+                        "dst_node_ids": np.asarray(batch_dst_node_ids),
+                        "node_interact_times": np.asarray(batch_node_interact_times),
+                        "src_temporal_embeddings": batch_src_node_embeddings.detach().cpu(),
+                        "dst_temporal_embeddings": batch_dst_node_embeddings.detach().cpu(),
+                    }
+                )
+                run_negative_temporal_embeddings.append(
+                    {
+                        "neg_edge_ids": np.asarray(batch_edge_ids),
+                        "neg_src_node_ids": np.asarray(batch_neg_src_node_ids),
+                        "neg_dst_node_ids": np.asarray(batch_neg_dst_node_ids),
+                        "node_interact_times": np.asarray(batch_node_interact_times),
+                        "neg_src_temporal_embeddings": batch_neg_src_node_embeddings.detach().cpu(),
+                        "neg_dst_temporal_embeddings": batch_neg_dst_node_embeddings.detach().cpu(),
+                    }
+                )
+
             # get positive and negative probabilities, shape (batch_size, )
             # positive_probabilities = model[1](input_1=batch_src_node_embeddings, input_2=batch_dst_node_embeddings).squeeze(dim=-1).sigmoid()
             # negative_probabilities = model[1](input_1=batch_neg_src_node_embeddings, input_2=batch_neg_dst_node_embeddings).squeeze(dim=-1).sigmoid()
@@ -280,6 +309,17 @@ def evaluate_model_link_prediction(
                         (int(src), int(dst), float(score), float(timestamp))
                     )
 
+    if save_temporal_embeddings:
+        temporal_embeddings_path = (
+            f"{temporal_embeddings_dir}/temporal_embeddings.pt"
+        )
+        negative_temporal_embeddings_path = (
+            f"{temporal_embeddings_dir}/negative_temporal_embeddings.pt"
+        )
+        torch.save(run_temporal_embeddings, temporal_embeddings_path)
+        torch.save(run_negative_temporal_embeddings, negative_temporal_embeddings_path)
+
+
     if full_return:
         return (
             evaluate_losses,
@@ -308,6 +348,8 @@ def evaluate_model_link_prediction_ano_insertion(
     full_return: bool = False,
     temp: int = 1,
     return_batch_losses: bool = False,
+    save_temporal_embeddings: bool = False,
+    temporal_embeddings_dir: str | None = None,
 ):
     """
     evaluate models on the link prediction task
@@ -331,6 +373,11 @@ def evaluate_model_link_prediction_ano_insertion(
         model[0].set_neighbor_sampler(neighbor_sampler)
 
     model.eval()
+
+    if save_temporal_embeddings:
+        create_folder(temporal_embeddings_dir)
+        run_temporal_embeddings = []
+        run_negative_temporal_embeddings = []
 
     with torch.no_grad():
         # store evaluate losses and metrics
@@ -524,6 +571,29 @@ def evaluate_model_link_prediction_ano_insertion(
             else:
                 raise ValueError(f"Wrong value for model_name {model_name}!")
 
+
+            if save_temporal_embeddings:
+                run_temporal_embeddings.append(
+                    {
+                        "edge_ids": np.asarray(batch_edge_ids),
+                        "src_node_ids": np.asarray(batch_src_node_ids),
+                        "dst_node_ids": np.asarray(batch_dst_node_ids),
+                        "node_interact_times": np.asarray(batch_node_interact_times),
+                        "src_temporal_embeddings": batch_src_node_embeddings.detach().cpu(),
+                        "dst_temporal_embeddings": batch_dst_node_embeddings.detach().cpu(),
+                    }
+                )
+                run_negative_temporal_embeddings.append(
+                    {
+                        "neg_edge_ids": np.asarray(batch_edge_ids),
+                        "neg_src_node_ids": np.asarray(batch_neg_src_node_ids),
+                        "neg_dst_node_ids": np.asarray(batch_neg_dst_node_ids),
+                        "node_interact_times": np.asarray(batch_node_interact_times),
+                        "neg_src_temporal_embeddings": batch_neg_src_node_embeddings.detach().cpu(),
+                        "neg_dst_temporal_embeddings": batch_neg_dst_node_embeddings.detach().cpu(),
+                    }
+                )
+
             # get positive and negative probabilities, shape (batch_size, )
             # positive_probabilities = model[1](input_1=batch_src_node_embeddings, input_2=batch_dst_node_embeddings).squeeze(dim=-1).sigmoid()
             # negative_probabilities = model[1](input_1=batch_neg_src_node_embeddings, input_2=batch_neg_dst_node_embeddings).squeeze(dim=-1).sigmoid()
@@ -597,6 +667,17 @@ def evaluate_model_link_prediction_ano_insertion(
                     non_existant_links.append(
                         (int(src), int(dst), float(score), float(timestamp))
                     )
+
+    if save_temporal_embeddings:
+        temporal_embeddings_path = (
+            f"{temporal_embeddings_dir}/temporal_embeddings.pt"
+        )
+        negative_temporal_embeddings_path = (
+            f"{temporal_embeddings_dir}/negative_temporal_embeddings.pt"
+        )
+        torch.save(run_temporal_embeddings, temporal_embeddings_path)
+        torch.save(run_negative_temporal_embeddings, negative_temporal_embeddings_path)
+
 
     if full_return:
         return (

@@ -332,6 +332,8 @@ def main(args):
                     time_gap=args.time_gap,
                     full_return=True,
                     temp=args.temperature,
+                    save_temporal_embeddings=True,
+                    temporal_embeddings_dir=f"{BASE}/temporal_embeddings_data/{args.dataset_name}/{args.model_name.lower()}/val",
                 )
                 val_score_folder = (
                 f"{BASE}/val_result_data/{args.dataset_name}/{args.model_name}"
@@ -382,6 +384,8 @@ def main(args):
                     time_gap=args.time_gap,
                     full_return=True,
                     temp=args.temperature,
+                    save_temporal_embeddings=True,
+                    temporal_embeddings_dir=f"{BASE}/temporal_embeddings_data/{args.dataset_name}/{args.model_name.lower()}/cal",
                 )
                 cal_score_folder = (
                     f"{BASE}/cal_result_data/{args.dataset_name}/{args.model_name}"
@@ -415,6 +419,8 @@ def main(args):
                 time_gap=args.time_gap,
                 full_return=True,
                 temp=args.temperature,
+                save_temporal_embeddings=True,
+                temporal_embeddings_dir=f"{BASE}/temporal_embeddings_data/{args.dataset_name}/{args.model_name.lower()}/test",
             )
             test_score_folder = (
                 f"{BASE}/test_result_data/{args.dataset_name}/{args.model_name}"
