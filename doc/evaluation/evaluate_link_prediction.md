@@ -1,37 +1,30 @@
 # evaluation/evaluate_link_prediction.py
 
 ## Purpose
-Describe the purpose of this module and how it fits into the project.
+Evaluate the link prediction model on the validation and test data.
 
 ## Responsibilities
-- [ ] Summarize the main tasks handled by this file.
-- [ ] List the key functions, classes, or procedures defined here.
-- [ ] Explain any significant side effects or external interactions.
+- evaluate the link prediciton model on the validation set.
+- evaluate the link prediciton model on the validation set.
+- evaluate the link prediciton model on the inductive setting for validation and test if inductive is active
+- evaluate the link prediciton model on the calibration set if calibration is active
+- store the results in the data folder
 
 ## Inputs
-- [ ] Describe required inputs, parameters, or configuration values.
-- [ ] Note any expected file formats, data structures, or environment assumptions.
+- load all necessary data from dataloader
 
 ## Outputs
-- [ ] Describe produced results, artifacts, or return values.
-- [ ] Mention any files written, metrics computed, or models trained.
+- For each evaluation it stores:
+  - predicted_links : predicted scores for actual links only
+  - actual_links : actuals links with their labels (0=normal, 1=anomaly)
+  - non_exist_links : predicted scores for negative sampling links
 
-## Key Components
-### Functions / Classes
-- [ ] Name:
-  - Purpose:
-  - Inputs:
-  - Outputs:
-
-### Important Workflow
-1. [ ] Step 1
-2. [ ] Step 2
-3. [ ] Step 3
 
 ## Dependencies
-- [ ] List related modules or packages used by this file.
-- [ ] Mention any configuration files or runtime assumptions.
+- NegativeEdgeSampler in utils.utils
+- evaluate_model_link_prediction in evaluation.evaluate_models_utils
+- get_link_prediction_data in utils.DataLoader
+- EarlyStopping in utils.EarlyStopping
 
 ## Notes
-- [ ] Add implementation details, caveats, or TODOs here.
-- [ ] Include usage examples or links to related modules if needed.
+

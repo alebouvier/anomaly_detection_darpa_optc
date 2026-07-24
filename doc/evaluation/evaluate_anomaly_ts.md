@@ -1,37 +1,38 @@
 # evaluation/evaluate_anomaly_ts.py
 
 ## Purpose
-Describe the purpose of this module and how it fits into the project.
+This script compute the metrics and plots for the link prediction task and the anomaly detection task.
 
 ## Responsibilities
-- [ ] Summarize the main tasks handled by this file.
-- [ ] List the key functions, classes, or procedures defined here.
-- [ ] Explain any significant side effects or external interactions.
+- [ ] compute link_prediction metrics from the validation results
+- [ ] compute anomaly detection metrics from the test results at the edge and graph level
+- [ ] store the most badly predicted data (false positive, false negative) by the model in a file for the validation and test set.
+- [ ] compute miscoverage rate if calibration is selected.
 
 ## Inputs
-- [ ] Describe required inputs, parameters, or configuration values.
-- [ ] Note any expected file formats, data structures, or environment assumptions.
+- [ ] load the validation, test and calibration results if calibration is selected.
 
 ## Outputs
-- [ ] Describe produced results, artifacts, or return values.
-- [ ] Mention any files written, metrics computed, or models trained.
+- link prediction results at the edge level
+  - report file with metrics
+  - ROC curve
+  - Precision recall curve
+  - calibration curve
+  - confusion matrix
+  - distribution histogram of scores for positive and negative examples
+- anomaly detection results 
+  - report file with metrics at the edge level
+  - ROC curve at the edge level
+  - Precision recall curve at the edge level
+  - calibration curve at the edge level
+  - confusion matrix at the graph level
+  - distribution histogram of scores for positive and negative examples at the edge level.
 
-## Key Components
-### Functions / Classes
-- [ ] Name:
-  - Purpose:
-  - Inputs:
-  - Outputs:
-
-### Important Workflow
-1. [ ] Step 1
-2. [ ] Step 2
-3. [ ] Step 3
 
 ## Dependencies
-- [ ] List related modules or packages used by this file.
-- [ ] Mention any configuration files or runtime assumptions.
+- utils.utils
+- evaluation.calibration
 
 ## Notes
-- [ ] Add implementation details, caveats, or TODOs here.
-- [ ] Include usage examples or links to related modules if needed.
+- anomaly detection at the graph level means that we consider graph windows of 15 minutes and associate for each graph a score computed as the mean of the 1% highest anomaly scores.
+- The adaptive miscoverage level plot was never used in practice.
