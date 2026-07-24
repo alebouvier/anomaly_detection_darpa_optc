@@ -46,6 +46,9 @@ def load_temporal_embeddings_dataframe(temporal_embeddings_path):
         if dst_embeddings.ndim == 1:
             dst_embeddings = dst_embeddings[np.newaxis, :]
 
+        if edge_ids.reshape(-1).shape[0] != 256 or src_ids.reshape(-1).shape[0] != 256 or dst_ids.reshape(-1).shape[0] != 256 or np.asarray(batch["node_interact_times"]).reshape(-1).shape[0] != 256:
+            continue
+
         batch_df = pd.DataFrame(
             {
                 "edge_ids": edge_ids.reshape(-1),
@@ -489,12 +492,114 @@ def visualisation_temporal_embeddings_negative_compare(client, model_name, mode)
 
         print("map saved")
 
+
+def visualisation_temporal_embeddings_negative_compare_test(client, model_name):
+    edge_features_path = f"{BASE}/processed_data/optc_{client}/ml_optc_{client}.npy"
+    edge_features = np.load(edge_features_path)
+    edge_list_path = f"{BASE}/processed_data/optc_{client}/ml_optc_{client}.csv"
+    edge_list = pd.read_csv(edge_list_path, header=0)
+    node_features_path = f"{BASE}/processed_data/optc_{client}/ml_optc_{client}_node.npy"
+    node_features = np.load(node_features_path)
+    temporal_positive_embeddings_path = f"{BASE}/temporal_embeddings_data/optc_{client}/{model_name.lower()}/train/temporal_embeddings.pt"
+    temporal_positive_embeddings_train = load_temporal_embeddings_dataframe(temporal_positive_embeddings_path)
+    temporal_negative_embeddings_path = f"{BASE}/temporal_embeddings_data/optc_{client}/{model_name.lower()}/train/negative_temporal_embeddings.pt"
+    temporal_negative_embeddings_train = load_temporal_embeddings_dataframe(temporal_negative_embeddings_path)
+
+    temporal_positive_embeddings_path = f"{BASE}/temporal_embeddings_data/optc_{client}/{model_name.lower()}/test/temporal_embeddings.pt"
+    temporal_positive_embeddings_test = load_temporal_embeddings_dataframe(temporal_positive_embeddings_path)
+    temporal_negative_embeddings_path = f"{BASE}/temporal_embeddings_data/optc_{client}/{model_name.lower()}/test/negative_temporal_embeddings.pt"
+    temporal_negative_embeddings_test = load_temporal_embeddings_dataframe(temporal_negative_embeddings_path)
+
+    temporal_positive_embeddings_train["positive"] = np.ones((temporal_positive_embeddings_train.shape[0],), dtype=np.int32)
+    temporal_negative_embeddings_train["positive"] = np.zeros((temporal_negative_embeddings_train.shape[0],), dtype=np.int32)
+
+    temporal_positive_embeddings_test["anomaly"] = temporal_positive_embeddings_test["edge_ids"].isin(edge_list[edge_list["label"] == 1]["idx"])
+    temporal_negative_embeddings_test["anomaly"] = np.zeros((temporal_negative_embeddings_test.shape[0],), dtype=np.int32)
+
+    temporal_embeddings_train = pd.concat([temporal_positive_embeddings_train, temporal_negative_embeddings_train])
+    temporal_embeddings_train.sort_values(by=["node_interact_times"], inplace=True, ignore_index=True)
+
+    temporal_embeddings_test = pd.concat([temporal_positive_embeddings_test, temporal_negative_embeddings_test])
+    temporal_embeddings_test.sort_values(by=["node_interact_times"], inplace=True, ignore_index=True)
+
+
+    print(f"data shape: {temporal_embeddings_train.shape}")
+
+    src_embeddings_ano = np.vstack(temporal_embeddings_test[temporal_embeddings_test["anomaly"] == 1]["src_temporal_embeddings"].tolist())
+    dst_embeddings_ano = np.vstack(temporal_embeddings_test[temporal_embeddings_test["anomaly"] == 1]["dst_temporal_embeddings"].tolist())
+    X_ano = np.concatenate([src_embeddings_ano, dst_embeddings_ano], axis=1)
+
+    window_size = 3600
+    
+    stride = 24 * 3600
+    start = int(temporal_embeddings_train["node_interact_times"].min())
+    end = int(temporal_embeddings_train["node_interact_times"].max())
+    
+    for window_start in range(start, end, stride):
+        window_end = window_start + window_size
+
+        id_start = np.searchsorted(temporal_embeddings_train["node_interact_times"], window_start)
+        id_end = np.searchsorted(temporal_embeddings_train['node_interact_times'], window_end)
+
+        if id_start == id_end:
+            continue
+
+        src_embeddings = np.vstack(temporal_embeddings_train["src_temporal_embeddings"].iloc[id_start:id_end].tolist())
+        dst_embeddings = np.vstack(temporal_embeddings_train["dst_temporal_embeddings"].iloc[id_start:id_end].tolist())
+        X = np.concatenate([src_embeddings, dst_embeddings], axis=1)
+
+        # Create UMAP instance with default parameters
+        reducer = umap.UMAP(random_state=42, n_neighbors=15)
+
+        # Fit and transform the data
+        embedding = reducer.fit_transform(X)
+
+        positive_embedding = embedding[temporal_embeddings_train['positive'][id_start:id_end] == 1,:]
+        negative_embedding = embedding[temporal_embeddings_train['positive'][id_start:id_end] == 0,:]
+
+        anomaly_embedding = reducer.transform(X_ano)
+
+        fig, ax = plt.subplots(figsize=(12, 10))
+
+        # 1. 
+        ax.scatter(
+            positive_embedding[:, 0], positive_embedding[:, 1],
+            s=8, c="steelblue", alpha=0.5,
+            edgecolors="none", zorder=1, label="positive edge"
+        )
+
+        # 2. 
+        ax.scatter(
+            negative_embedding[:, 0], negative_embedding[:, 1],
+            s=8, c="pink",
+            edgecolors="none",
+            zorder=1, label="negative edge"
+        )
+
+        ax.scatter(
+            anomaly_embedding[:, 0], anomaly_embedding[:, 1],
+            s=64, c="crimson", marker="X",
+            edgecolors="black", linewidths=1.2,
+            zorder=3, label="anomalous edge"
+        )
+
+        ax.legend()
+        ax.set_title(f'UMAP temporal_embedding (ts: {window_start}, nb_edge: {id_end - id_start})')
+        plt.xlabel('UMAP 1')
+        plt.ylabel('UMAP 2')
+        plt.grid(True, alpha=0.3)
+        plt.savefig(f"experiments/optc_{client}/{model_name.lower()}/temporal_embedding_negative_compare_{mode}_map_{int(window_start)}_{int(window_end)}.png")
+
+        print("map saved")
+
+
 def main(clients, model_name="GraphMixer"):
     for client in clients:
-        visualisation_node_features(client)
-        visualisation_edge_features(client)
-        visualisation_edge_features_anomaly_compare(client)
-        visualisation_temporal_embeddings(client, model_name=model_name)
-        visualisation_temporal_embeddings_negative_compare(client, model_name=model_name, mode="train")
-        visualisation_temporal_embeddings_negative_compare(client, model_name=model_name, mode="val")
-        visualisation_temporal_embeddings_negative_compare(client, model_name=model_name, mode="test")
+        # visualisation_node_features(client)
+        # visualisation_edge_features(client)
+        # visualisation_edge_features_anomaly_compare(client)
+        # visualisation_temporal_embeddings(client, model_name=model_name)
+        # visualisation_temporal_embeddings_negative_compare(client, model_name=model_name, mode="train")
+        # visualisation_temporal_embeddings_negative_compare(client, model_name=model_name, mode="val")
+        # visualisation_temporal_embeddings_negative_compare(client, model_name=model_name, mode="test")
+        visualisation_temporal_embeddings_negative_compare_test(client, model_name=model_name)

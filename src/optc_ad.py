@@ -116,13 +116,6 @@ if __name__ == "__main__":
         start_val = args.start_val
         start_test = args.start_test
 
-        graphs = f"{BASE}/graph_data/graphs.pkl"
-        cmds = f"{BASE}/feature_data/cmds.pkl"
-        paths = f"{BASE}/feature_data/paths.pkl"
-        model_w2v_path = f"{BASE}/feature_data/w2v_model_path.pt"
-        features_e = f"{BASE}/feature_data/features_e.pkl"
-        features_g = f"{BASE}/feature_data/features_g.pkl"
-        label_path = f"{BASE}/label_data/malicious.json"
 
         cfg_dataset = open_config(dataset)
 

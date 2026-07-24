@@ -146,7 +146,7 @@ def print_results(dataset_name, model_name, metrics, conf_evaluator, mode, level
         plt.close(fig)
 
     # ------------------------------------------------------------------
-    # 6. 2 figures side by side: histogram of scores in the calibration bins for positive samples and negative samples (abscisse [0,1])
+    # 6. histogram of scores in the calibration bins for positive samples and negative samples (abscisse [0,1])
     # ------------------------------------------------------------------
     if "calibration_bin_counts_pos" in metrics and "calibration_bin_counts_neg" in metrics and mode == "link_prediction":
         fig, ax = plt.subplots()
