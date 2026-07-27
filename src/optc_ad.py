@@ -120,6 +120,9 @@ if __name__ == "__main__":
         elif task == "feature_bert":  
             extract_features(dataset, clients, model_type="bert")
 
+        elif task == "feature_no":  
+            extract_features(dataset, clients, model_type="no")
+
 
         elif task == "train_link_prediction":
             train_link_prediction_args = get_link_prediction_args(is_evaluation=False)
