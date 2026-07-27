@@ -1,37 +1,30 @@
 # features/bert.py
 
 ## Purpose
-Describe the purpose of this module and how it fits into the project.
+evaluate a bert model on paths and command lines to get a representation. 
 
 ## Responsibilities
-- [ ] Summarize the main tasks handled by this file.
-- [ ] List the key functions, classes, or procedures defined here.
-- [ ] Explain any significant side effects or external interactions.
+- preprocess the paths and command lines (split on "/", ...) to get a sequence of words
+- create an embedding from this sequence.
 
-## Inputs
-- [ ] Describe required inputs, parameters, or configuration values.
-- [ ] Note any expected file formats, data structures, or environment assumptions.
-
-## Outputs
-- [ ] Describe produced results, artifacts, or return values.
-- [ ] Mention any files written, metrics computed, or models trained.
 
 ## Key Components
 ### Functions / Classes
-- [ ] Name:
-  - Purpose:
-  - Inputs:
+- eval_for_encoding:
+  - Purpose: function used in feature_bert.py to preprocess and evaluate a bert model on paths and command lines. All other functions are called from this one except encode_text.
+  - Inputs: 
+    - the bert tokenizer
+    - the bert model
+    - the path or command line to evaluate
+    - if it is a command line or a path
   - Outputs:
+    - the embedding
 
-### Important Workflow
-1. [ ] Step 1
-2. [ ] Step 2
-3. [ ] Step 3
 
 ## Dependencies
-- [ ] List related modules or packages used by this file.
-- [ ] Mention any configuration files or runtime assumptions.
+- utils.utils
 
 ## Notes
-- [ ] Add implementation details, caveats, or TODOs here.
-- [ ] Include usage examples or links to related modules if needed.
+- This script has been adapted from the GRAAL project, so some functions are useless such as :
+  - eval_function_coeff_path_2combine
+  - eval_function_coeff_path_decrois_geo

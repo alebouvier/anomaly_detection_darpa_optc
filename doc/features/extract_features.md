@@ -1,7 +1,8 @@
 # features/extract_features.py
 
 ## Purpose
-Describe the purpose of this module and how it fits into the project.
+It create numeric features for the nodese and edges using a bert or w2v model.
+
 
 ## Responsibilities
 - [ ] Summarize the main tasks handled by this file.
