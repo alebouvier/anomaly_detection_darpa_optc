@@ -18,6 +18,7 @@ from utils.utils import period, round_duration, save_pkl, open_config, BASE
 
 def get_log_stats(log_iter):
     # for each entity (type, id): count logs and verify consistency
+    """Retrieve get log stats."""
     objects = {}
     objects_actions = defaultdict(Counter)
     logs_by_object_type = Counter()
@@ -91,6 +92,7 @@ def get_log_stats(log_iter):
 
 
 def extract_data(file):
+    """Perform the work of extract data."""
     print("File: ", file)
     open_fn = gzip.open if file.endswith(".gz") else open
     with open_fn(file, "rt") as f:
@@ -99,11 +101,13 @@ def extract_data(file):
 
 
 def iter_logs(files):
+    """Perform the work of iter logs."""
     for file in files:
         yield from extract_data(file)
 
 
 def main(clients, logs, dataset, start_val, start_test):
+    """Perform the work of main."""
     print("Start task graph")
     utils_dataset = importlib.import_module(f"data.{dataset}_utils")
     for c in clients:
@@ -152,6 +156,7 @@ def main(clients, logs, dataset, start_val, start_test):
 
 def repartition_anomaly_by_client(anomaly_data):
     # find number of anomalies by client and by day
+    """Perform the work of repartition anomaly by client."""
     client_anomalies = defaultdict(list)
     for log in iter_logs(anomaly_data):
         client = log["hostname"].lower()
@@ -164,6 +169,7 @@ def repartition_anomaly_by_client(anomaly_data):
 
 
 def count_process_paths(process_adj):
+    """Perform the work of count process paths."""
     process_in = defaultdict(set)
     for src, targets in process_adj.items():
         for dst in targets:
@@ -189,6 +195,7 @@ def print_stats(
     process_ids_cross,
     process_adj,
 ):
+    """Perform the work of print stats."""
     totals_by_type = Counter()
     for (otype, _), stats in objects.items():
         totals_by_type[otype] += stats["num_logs"]

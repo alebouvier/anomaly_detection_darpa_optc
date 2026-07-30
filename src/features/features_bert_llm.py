@@ -22,6 +22,7 @@ from utils.utils import (
 class Encoding_builder(BertEncodingBuilder):
     def encoding_process(self, g, nodes):
         features_e_g = {}
+        """Perform the work of encoding process."""
         parent_and_son = [0, 0, 0, 0]
 
         process_logs = []
@@ -52,6 +53,7 @@ class Encoding_builder(BertEncodingBuilder):
 
 
 def main(clients, graphs, model_w2v_path, dataset, g=False, e=False):
+    """Perform the work of main."""
     utils_dataset = importlib.import_module(f"data.{dataset}_utils")
     cfg_dataset = open_config(dataset)
 

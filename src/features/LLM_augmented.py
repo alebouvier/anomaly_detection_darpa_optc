@@ -10,6 +10,7 @@ genai.configure(api_key="AIzaSyCUzeOP2HNOgyxFwOLKTMja7tXElGalmGM")  # free at ai
 
 
 def _strip_markdown_codeblock(text: str) -> str:
+    """Perform the work of strip markdown codeblock."""
     text = text.strip()
     if text.startswith("```"):
         lines = text.split("\n")
@@ -22,6 +23,7 @@ def _strip_markdown_codeblock(text: str) -> str:
 
 
 def _normalize_quotes_and_commas(text: str) -> str:
+    """Perform the work of normalize quotes and commas."""
     text = text.replace("“", '"').replace("”", '"')
     text = text.replace("‘", "'").replace("’", "'")
     text = re.sub(r',\s*(?=[}\]])', '', text)
@@ -30,6 +32,7 @@ def _normalize_quotes_and_commas(text: str) -> str:
 
 def _extract_json_text(text: str) -> str:
     # Keep only the first JSON object/array block
+    """Perform the work of extract json text."""
     first_bracket = min(
         [idx for idx in (text.find('['), text.find('{')) if idx != -1],
         default=-1,
@@ -164,6 +167,7 @@ class Template:
 
 
 def compile_templates(raw_templates: list[dict]) -> list[Template]:
+    """Perform the work of compile templates."""
     return [Template(**t) for t in raw_templates]
 
 
@@ -235,6 +239,7 @@ Logs:
 # --- Step 5: Full pipeline ---
 
 def enrich_all_logs(logs: list[dict]) -> list[str]:
+    """Perform the work of enrich all logs."""
     print(f"Total logs: {len(logs)}")
 
     # 1. Sample and generate templates (1-2 LLM calls)

@@ -34,6 +34,7 @@ class Encoding_builder:
             self.model = model
 
     def build_encoding(self):
+        """Build node and edge features for the graph."""
 
         node_types = set(
             data.get("type_") for _, data in self.g.nodes(data=True) if "type_" in data
@@ -86,6 +87,7 @@ class Encoding_builder:
         return features_g, features_e
 
     def mean_path(self, lst):
+        """Return the mean feature vector for a list of paths."""
         if len(lst) > 0:
             return np.mean(lst, axis=0)
         else:
@@ -94,6 +96,7 @@ class Encoding_builder:
     def encoding_process(self, g, nodes):
         # graph
         image_paths = []
+        """Perform the work of encoding process."""
         parent_image_paths = []
         command_line_paths = []
         sids = []
@@ -153,6 +156,7 @@ class Encoding_builder:
         return features_g, features_e_g
 
     def degree(self, degrees):
+        """Return the maximum and average degree values for a set of nodes."""
         if len(degrees) == 0:
             return 0, 0
         return int(sorted(degrees.values(), reverse=True)[0]), int(
@@ -160,6 +164,7 @@ class Encoding_builder:
         )
 
     def get_degree(self, g, nodes):
+        """Compute graph-level and node-level degree features for the selected nodes."""
         c, d = self.degree(dict(g.degree(nodes)))
         e, f = self.degree(dict(g.in_degree(nodes)))
         h, i = self.degree(dict(g.out_degree(nodes)))
@@ -182,6 +187,7 @@ class Encoding_builder:
         return features_g, features_e
 
     def encoding(self, g, nodes):
+        """Combine multiple feature groups into the final graph encoding."""
         fg_a, fe_a = self.edge_type_for_node_type(g, nodes)
         fg_b, fe_b = self.get_degree(g, nodes)
         fg_c, fe_c = self.lifetimenodes(nodes)
@@ -201,6 +207,7 @@ class Encoding_builder:
 
     def lifetimenodes(self, nodes):
         min_life = 15
+        """Perform the work of lifetimenodes."""
         max_life = 0
         sum_life = 0
 
@@ -218,6 +225,7 @@ class Encoding_builder:
 
     def freq_time_mean(self, node_freq):
         a = []
+        """Perform the work of freq time mean."""
         for _, freq in node_freq.items():
             if len(freq) < 1:
                 a.append(0)
@@ -227,6 +235,7 @@ class Encoding_builder:
 
     def node_time_for_node_type(self, g, nodes):
         node_time_out_freq = {}
+        """Perform the work of node time for node type."""
         node_time_in_freq = {}
 
         for type_ in self.cfg["MODEL"]["NODES_TYPES_ALL"]:
@@ -263,6 +272,7 @@ class Encoding_builder:
         return features_g, features_e
 
     def freq_time(self, edges, out, node_time_freq):
+        """Collect lifetime values for edges grouped by node type."""
         for edge in edges:
             if out:
                 node_type = type(edge[1]).__name__
@@ -278,6 +288,7 @@ class Encoding_builder:
         return node_time_freq
 
     def edge_type_for_node_type(self, g, nodes):
+        """Count edge and node types for each selected node."""
         edge_types_out_freq = {}
         edge_types_in_freq = {}
         node_types_out_freq = {}
@@ -338,6 +349,7 @@ class Encoding_builder:
         return features_g, features_e
 
     def freq_(self, edges, out, edge_types_freq, node_types_freq):
+        """Count edge and node type frequencies for the supplied edges."""
         for edge in edges:
             edge_type = edge[2]["action"]
             if edge_type in edge_types_freq:
@@ -358,17 +370,21 @@ class Encoding_builder:
 
     def set_g(self, g):
         self.g = g
+        """Store set g."""
         return g
 
     def set_encoding_size(self, encoding_size):
         self.encoding_size = encoding_size
+        """Store set encoding size."""
         return encoding_size
 
     def info(self):
         return f"Graph {self.g}."
+        """Perform the work of info."""
 
 
 def main( clients, graphs, model_w2v_path, dataset, g=False, e=False):
+    """Perform the work of main."""
     utils_dataset = importlib.import_module(f"data.{dataset}_utils")
     cfg_dataset = open_config(dataset)
 

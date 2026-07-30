@@ -36,6 +36,7 @@ from tqdm import tqdm
 
 
 def get_sets(times, entity=False):
+    """Retrieve get sets."""
     cfg = open_config("optc")
     train_files = []
     val_files = []
@@ -55,6 +56,7 @@ def get_sets(times, entity=False):
 
 
 def logs_from_folder(folder, client):
+    """Perform the work of logs from folder."""
     clients_data = []
     for root, dirs, files in os.walk(folder):
         files_selected = [
@@ -78,6 +80,7 @@ def logs_from_folder(folder, client):
 
 
 def extract_labels(clients, duration):
+    """Perform the work of extract labels."""
     cfg = open_config("optc")
     labels = "config_optc/" + cfg["MODEL"]["LABEL"]
 
@@ -134,12 +137,14 @@ def save_txt(data, file):
 
 
 def save(data, path_file):
+    """Store save."""
     create_folder(os.path.dirname(path_file))
     with open(path_file, "wb") as file:
         pkl.dump(data, file)
 
 
 def save_pkl(data, file):
+    """Store save pkl."""
     folder, _ = os.path.split(file)
     create_folder(folder)
     with open(file, "wb") as file:
@@ -148,6 +153,7 @@ def save_pkl(data, file):
 
 def load_pickle_file(file_path):
     # print(file_path)
+    """Retrieve load pickle file."""
     try:
         with open(file_path, "rb") as f:
             # print("ok")
@@ -157,6 +163,7 @@ def load_pickle_file(file_path):
 
 
 def extract_csv(filename):
+    """Perform the work of extract csv."""
     pairs = []
     with open(filename, mode="r") as file:
         reader = csv.reader(file)
@@ -166,6 +173,7 @@ def extract_csv(filename):
 
 
 def save_csv(filename, list1, list2):
+    """Store save csv."""
     rows = zip(list1, list2)
     with open(filename, mode="w", newline="") as file:
         writer = csv.writer(file)
@@ -173,12 +181,14 @@ def save_csv(filename, list1, list2):
 
 
 def open_json(folder, filename):
+    """Perform the work of open json."""
     with open(folder + filename, "r") as f:
         data = json.load(f)
     return data
 
 
 def save_json(data, folder, filename):
+    """Store save json."""
     create_folder(folder)
     with open(folder + filename, "w") as f:
         json.dump(data, f)
@@ -189,6 +199,7 @@ def save_list_to_txt(datas, file):
     # datas is a list to save: each element will be separated by \n in the saved file.
 
     # If existed file, remove it.
+    """Store save list to txt."""
     if os.path.isfile(file):
         os.remove(file)
 
@@ -209,6 +220,7 @@ def save_list_to_txt(datas, file):
 
 # TIME#################################
 def period(start, duration):
+    """Perform the work of period."""
     datetime_object_start = transform_date(start)
     datatime_object_end = datetime_object_start + timedelta(minutes=duration)
     end = datatime_object_end.isoformat(timespec="milliseconds")
@@ -216,6 +228,7 @@ def period(start, duration):
 
 
 def transform_date(time):
+    """Process transform date."""
     datetimeisoformat1_re = re.compile(r"(\.\d)(-04)")
     datetimeisoformat2_re = re.compile(r"(\.\d\d)(-04)")
     if datetimeisoformat1_re.search(time):
@@ -227,6 +240,7 @@ def transform_date(time):
 
 
 def get_duration(start, end):
+    """Retrieve get duration."""
     datetime_object_start = transform_date(start)
     datetime_object_end = transform_date(end)
     duration = abs(datetime_object_end - datetime_object_start)
@@ -239,6 +253,7 @@ VAL_SPLIT = "2019-09-21T00:00:00.000-04:00"
 
 
 def get_train_val_files(folder):
+    """Retrieve get train val files."""
     train_files = []
     val_files = []
     for root, dirs, files in os.walk(folder):
@@ -261,6 +276,7 @@ def get_train_val_files(folder):
 
 
 def get_test_files(folder):
+    """Retrieve get test files."""
     test_files = []
     for root, dirs, files in os.walk(folder):
         if "/eval" in root:
@@ -283,6 +299,7 @@ def load_word2vec_model(file):
 
 def plot_sim(folder, x, y):
 
+    """Visualize plot sim."""
     cont = [sub[0] for sub in y]
     comb = [sub[1] for sub in y]
     geo1 = [sub[2] for sub in y]
@@ -311,6 +328,7 @@ def plot_sim_nberror(
 ):
 
     # Example dataset
+    """Visualize plot sim nberror."""
     data = pd.DataFrame(
         {
             "Mistake": np.array(mistakes),
@@ -373,6 +391,7 @@ def plot_sim_nberror(
 
 def pvalue_matrix_kendall(df, fonc):
     # Calculer les p-values pour chaque paire de colonnes
+    """Perform the work of pvalue matrix kendall."""
     for col1 in df.columns:
         for f in fonc:
             _, p_value = kendalltau(df[col1], pd.Series(f))
@@ -402,6 +421,7 @@ def pacmac_cluser(data, sentence, labels1, labels2, folder, nb_dim):
 
 
 def pacmac_plot(X_embedded, labels, folder, sentence):
+    """Perform the work of pacmac plot."""
     da = {
         "x": X_embedded[:, 0],
         "y": X_embedded[:, 1],
@@ -419,6 +439,7 @@ def pacmac_plot(X_embedded, labels, folder, sentence):
 
 # ROC#############################
 def roc(labelled, score, th):
+    """Perform the work of roc."""
     try:
         auc = roc_auc_score(labelled, score)
     except Exception as e:
@@ -442,6 +463,7 @@ def roc(labelled, score, th):
 
 
 def plot_training_curves(folder, params, number, train_losses, val_losses):
+    """Visualize plot training curves."""
     plt.figure(figsize=(10, 6))
     epochs = range(1, len(train_losses) + 1)
     create_folder(folder)
@@ -461,6 +483,7 @@ def plot_training_curves(folder, params, number, train_losses, val_losses):
 
 
 def plot_roc(folder, labelled, score, best_th=None, client=None):
+    """Visualize plot roc."""
     best_threshold = best_th
     try:
         auc = roc_auc_score(labelled, score)
@@ -533,6 +556,7 @@ def plot_roc(folder, labelled, score, best_th=None, client=None):
 
 
 def plot_auc(folder, auc, fpr, tpr, best_th, th_tpr, th_fpr, acc, client=None):
+    """Visualize plot auc."""
     plt.plot(fpr, tpr, label=f"AUC = {auc}")
     plt.scatter(
         th_fpr,
@@ -554,6 +578,7 @@ def plot_auc(folder, auc, fpr, tpr, best_th, th_tpr, th_fpr, acc, client=None):
 
 
 def plot_prc(folder, auc, rec, prec, client=None):
+    """Visualize plot prc."""
     plt.plot(rec, prec, label=f"AUC = {auc}")
     plt.xlabel("Precision")
     plt.ylabel("Recall")
@@ -567,6 +592,7 @@ def plot_prc(folder, auc, rec, prec, client=None):
 
 
 def plot_timelapse(folder, clients, f_name, loss, pred, duration):
+    """Visualize plot timelapse."""
     print(len(f_name), len(f_name[0]), len(loss), len(loss[0]), len(pred), len(pred[0]))
     # print(f_name[0], loss[0], pred[0])
     data = {}
@@ -702,6 +728,7 @@ def plot_timelapse(folder, clients, f_name, loss, pred, duration):
 
 # ENCODING######################################################""
 def encoding_parent_son(lst, pipw, ipw):
+    """Perform the work of encoding parent son."""
     if pipw == 0:
         pipw = "0"
     if ipw == 0:
@@ -721,6 +748,7 @@ SIDS_CLASS = ["18", "19", "20", "21", "90", "96"]
 
 
 def encoding_sid(lst):
+    """Perform the work of encoding sid."""
     target = [0 for i in range(len(SIDS_CLASS) + 1)]
     occurrences = Counter(lst)
     result = list(occurrences.items())
@@ -758,6 +786,7 @@ class EarlyStopping:
             self.counter = 0
 
     def save_checkpoint(self, val_loss, model):
+        """Store save checkpoint."""
         torch.save(model.state_dict(), self.path)
 
 
@@ -772,17 +801,20 @@ class LossCustom(nn.Module):
         self.coeff = 1
 
     def forward(self, outputs, inputs):
+        """Perform the work of forward."""
         squared_diff = (inputs - outputs) ** 2
         total_loss = self.weight_cont * squared_diff
         return self.coeff * total_loss.mean()
 
     def eval_(self, outputs, inputs):
+        """Perform the work of eval."""
         squared_diff = (inputs.detach().cpu() - outputs.detach().cpu()) ** 2
         total_loss = self.weight_cont * squared_diff
         t = np.mean(total_loss.numpy(), axis=1)
         return self.coeff * t
 
     def eval_device(self, outputs, inputs):
+        """Perform the work of eval device."""
         squared_diff = (inputs - outputs) ** 2
         total_loss = self.weight_cont * squared_diff
         print(len(inputs), inputs, len(outputs), outputs, len(total_loss), total_loss)
@@ -790,6 +822,7 @@ class LossCustom(nn.Module):
         return self.coeff * t
 
     def eval(self, outputs, inputs):
+        """Perform the work of eval."""
         cont_loss = self.continu_loss_eval(outputs, inputs)
         total_loss = self.weight_cont * cont_loss.numpy()
         return self.coeff * np.mean(total_loss, axis=1)
@@ -805,6 +838,7 @@ class CustomDataset(Dataset):
         self.labelled = self.extract_graph_labels(labels, files, duration)
 
     def extract_graph_labels(self, labels, files, duration):
+        """Perform the work of extract graph labels."""
         labels_graphs = []
         tru = []
         if labels is None:
@@ -841,9 +875,11 @@ class CustomDataset(Dataset):
         return labels_graphs
 
     def set_item_size(self, files):
+        """Store set item size."""
         return len(files[0]) - 1  # remove the label
 
     def set_node_file(self, files, node):
+        """Store set node file."""
         node_files = []
         for file in tqdm(files):
             if os.path.exists(file.replace("Process", node)):
@@ -858,12 +894,14 @@ class CustomDataset(Dataset):
         return node_files
 
     def get_files(self):
+        """Retrieve get files."""
         return self.files
 
     def __len__(self):
         return len(self.data)
 
     def general_normalize(self, data, max, min):
+        """Perform the work of general normalize."""
         if max is None:
             max = np.max(np.asarray(data), axis=0)[1:]
         if min is None:
@@ -877,6 +915,7 @@ class CustomDataset(Dataset):
         return self.normalize(line[1:])
 
     def normalize(self, data):
+        """Perform the work of normalize."""
         data = np.asarray(data)
         with np.errstate(divide="ignore", invalid="ignore"):
             normalized = np.where(self.div == 0, 0, (data - self.min_) / self.div)
@@ -891,6 +930,7 @@ class Autoencoder(nn.Module):
         self.latent_dim = size_input // 4
 
     def forward(self, x):
+        """Perform the work of forward."""
         x_ = self.encoder(x)
         y = self.decoder(x_)
         return x_, y
@@ -905,6 +945,7 @@ class Autoencoder(nn.Module):
         optim,
         scheduler,
     ):
+        """Train train."""
         train_losses = []
         val_losses = []
         val_loss_tot = 0.0
@@ -950,6 +991,7 @@ class Autoencoder(nn.Module):
         return train_losses, val_losses, val_loss_tot, val_loss_last
 
     def eval_(self, test_loader, initloss):
+        """Perform the work of eval."""
         self.eval()
         losses = []
         eval_loss = 0.00
@@ -967,12 +1009,14 @@ class Autoencoder(nn.Module):
         return eval_loss / len(test_loader), losses
 
     def eval_one(self, data):
+        """Perform the work of eval one."""
         self.eval()
         with torch.no_grad():
             latents, _ = self(data)
             return latents[0]
 
     def _build_encoder(self, size_input, dropout_rate):
+        """Create build encoder."""
         return nn.Sequential(
             nn.Linear(size_input, size_input // 2),
             nn.ReLU(),
@@ -981,6 +1025,7 @@ class Autoencoder(nn.Module):
         )
 
     def _build_decoder(self, size_input, dropout_rate):
+        """Create build decoder."""
         return nn.Sequential(
             nn.Linear(size_input // 4, size_input // 2),
             nn.ReLU(),
@@ -988,6 +1033,7 @@ class Autoencoder(nn.Module):
         )
 
     def get_output_input(self, inputs, outputs):
+        """Retrieve get output input."""
         print(inputs)
 
 
@@ -1004,6 +1050,7 @@ class CustomDatasetEntitie(Dataset):
         self.max_, self.min_, self.div_ = self.general_normalize_(self.data, max, min)
 
     def set_item_size(self, node, files):
+        """Store set item size."""
         len_node_encoding = 0
         with open(files[0].replace("_event", "_action"), "rb") as f:
             line = pkl.load(f)
@@ -1014,6 +1061,7 @@ class CustomDatasetEntitie(Dataset):
         return len_node_encoding
 
     def set_node_file(self, files, node):
+        """Store set node file."""
         node_files = []
         for file in files:
             if os.path.exists(

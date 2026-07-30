@@ -18,6 +18,7 @@ ACTION_TYPES = ["OPEN", "CREATE", "TERMINATE", "MODIFY", "WRITE", "RENAME", "REA
 
 
 def read_line_csv_file(path: Path) -> Iterator[list]:
+    """Retrieve read line csv file."""
     mode = "rt" if path.suffix == ".gz" else "r"
     if path.suffix == ".gz":
         f = gzip.open(path, mode=mode, newline="")
@@ -34,6 +35,7 @@ def read_line_csv_file(path: Path) -> Iterator[list]:
 
 
 def count_csv_rows(path: Path) -> int:
+    """Perform the work of count csv rows."""
     mode = "rt" if path.suffix == ".gz" else "r"
     if path.suffix == ".gz":
         f = gzip.open(path, mode=mode, newline="")
@@ -47,6 +49,7 @@ def count_csv_rows(path: Path) -> int:
 
 
 def one_hot_encoding(type_info: str, is_edge: bool) -> List[int]:
+    """Perform the work of one hot encoding."""
     classes = ACTION_TYPES if is_edge else OBJECT_TYPES
     features = [0] * len(classes)
     if type_info in classes:
@@ -55,6 +58,7 @@ def one_hot_encoding(type_info: str, is_edge: bool) -> List[int]:
 
 
 def build_text_sequence(raw_line: str, cfg) -> str:
+    """Create build text sequence."""
     if raw_line is None:
         return ""
 
@@ -67,6 +71,7 @@ def build_text_sequence(raw_line: str, cfg) -> str:
 
 
 def w2v_encoding(model, cmd_path_info, cfg):
+    """Perform the work of w2v encoding."""
     if not pd.isna(cmd_path_info):
         return eval_for_encoding(model, cmd_path_info, cfg).tolist()
     else:
@@ -74,6 +79,7 @@ def w2v_encoding(model, cmd_path_info, cfg):
 
 
 def bert_encoding(tokenizer, model, cmd_path_info, cfg):
+    """Perform the work of bert encoding."""
     if pd.isna(cmd_path_info) or cmd_path_info in (None, "", 0):
         return [0] * cfg["MODEL"]["LEN_ENCODE_PATH"]
 
@@ -96,6 +102,7 @@ def create_features(
     bert_tokenizer=None,
     bert_model=None,
 ) -> np.ndarray:
+    """Create create features."""
     dim_type = len(ACTION_TYPES) if is_edge else len(OBJECT_TYPES)
     dim = dim_type + cfg["MODEL"]["LEN_ENCODE_PATH"]
     create_folder(output_path.parent)
@@ -131,6 +138,7 @@ def create_features(
 
 
 def save_processed_data(output_dir: Path, dataset, client, edge_features: np.ndarray, node_features: np.ndarray) -> None:
+    """Store save processed data."""
     create_folder(output_dir)
     np.save(output_dir / f"ml_{dataset}_{client}.npy", edge_features)
     np.save(output_dir / f"ml_{dataset}_{client}_node.npy", node_features)
@@ -146,6 +154,7 @@ def process_client(
     bert_tokenizer=None,
     bert_model=None,
 ) -> None:
+    """Process process client."""
     input_dir = Path(BASE) / "processed_data" / f"{dataset}_{client}"
 
     if model_type.lower() == "no":
@@ -193,9 +202,11 @@ def process_client(
 
 
 def main(dataset, clients, model_type: str = "w2v", bert_dir: str | None = None) -> None:
+    """Perform the work of main."""
     cfg = open_config(dataset)
 
-    use_type = False
+    use_type = True
+    # bert_dir = "google/bert_uncased_L-2_H-128_A-2"
 
     if model_type.lower() == "no":
         for client in clients:

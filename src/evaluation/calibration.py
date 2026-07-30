@@ -11,6 +11,7 @@ class ConformalForecastingEvaluator:
         self.dataset_name, self.model_name = dataset_name, model_name
     
     def get_threshold(self, lambda_decay=0.001):
+        """Retrieve get threshold."""
         if self.method == "classic":
             return self.get_threshold_from_scores(self.miscoverage_level)
         if self.method == "adaptive":
@@ -21,6 +22,7 @@ class ConformalForecastingEvaluator:
             raise ValueError(f"Unknown method: {self.method}")
         
     def get_threshold_from_scores(self, miscoverage_level):
+        """Retrieve get threshold from scores."""
         errors = []
         for src, dst, score, ts in self.predicted_links:
                 errors.append(1 - score)
@@ -34,6 +36,7 @@ class ConformalForecastingEvaluator:
         return threshold
 
     def get_threshold_from_weighted_scores(self, miscoverage_level, lambda_decay=0.001):
+        """Retrieve get threshold from weighted scores."""
         weights = self.compute_weights(lambda_decay=lambda_decay)
 
         errors = []
@@ -52,6 +55,7 @@ class ConformalForecastingEvaluator:
         return threshold
 
     def compute_weights(self, lambda_decay=0.001):
+        """Compute compute weights."""
         ts = np.array([ts for _, _, _, ts in self.predicted_links])
         t_max = np.max(ts)
         weights = np.exp(-lambda_decay * (t_max - ts)) 
@@ -59,6 +63,7 @@ class ConformalForecastingEvaluator:
 
     def evaluate(self, test_predicted_links, test_actual_links, test_non_exist_links, lr=0.005):
         # Get the threshold
+        """Perform the work of evaluate."""
         threshold = self.get_threshold()
 
         if self.method == "adaptive":
@@ -69,6 +74,7 @@ class ConformalForecastingEvaluator:
             raise ValueError(f"Unknown method: {self.method}")  
         
     def evaluate_classic(self, test_predicted_links, test_actual_links, test_non_exist_links, threshold):
+        """Perform the work of evaluate classic."""
         y_score = []
         for src, dst, score, ts in test_predicted_links:
             y_score.append(score)
@@ -79,6 +85,7 @@ class ConformalForecastingEvaluator:
         
 
     def evaluate_adaptive(self, test_predicted_links, test_actual_links, test_non_exist_links, lr=0.005, batch_size=256):
+        """Perform the work of evaluate adaptive."""
         miscoverage_level_list = [self.miscoverage_level]
         threshold_list = [self.get_threshold_from_scores(miscoverage_level_list[-1])]
         miscoverage_mask = []

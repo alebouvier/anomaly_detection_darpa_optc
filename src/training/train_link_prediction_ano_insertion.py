@@ -34,6 +34,7 @@ from utils.EarlyStopping import EarlyStopping
 
 def main(args):
 
+    """Perform the work of main."""
     warnings.filterwarnings("ignore")
 
     # get data for training, validation and testing

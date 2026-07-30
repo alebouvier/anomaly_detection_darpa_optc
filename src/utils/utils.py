@@ -28,6 +28,7 @@ BASE = os.getenv("DATA_BASE", "./data")
 
 # FILES and FOLDER ----------------------------------------
 def open_config(dataset):
+    """Perform the work of open config."""
     with open(f"config/{dataset}_config.yaml") as f:
         model_cfg = yaml.safe_load(f)
     return model_cfg
@@ -42,12 +43,14 @@ def create_folder(folder):
 
 
 def save(data, path_file):
+    """Store save."""
     create_folder(os.path.dirname(path_file))
     with open(path_file, "wb") as file:
         pkl.dump(data, file)
 
 
 def save_pkl(data, file):
+    """Store save pkl."""
     folder, _ = os.path.split(file)
     create_folder(folder)
     with open(file, "wb") as file:
@@ -55,12 +58,14 @@ def save_pkl(data, file):
 
 
 def load_pickle_file(file_path):
+    """Retrieve load pickle file."""
     print(file_path)
     with open(file_path, "rb") as f:
         return pkl.load(f)
 
 
 def save_json(datas, folder, file):
+    """Store save json."""
     create_folder(folder)
     file = folder + "/" + file + ".json"
     # print(file)
@@ -75,6 +80,7 @@ def save_json(datas, folder, file):
 
 # TIME ----------------------------------------
 def period(start, duration):
+    """Perform the work of period."""
     datetime_object_start = transform_date(start)
     datatime_object_end = datetime_object_start + timedelta(minutes=duration)
     end = datatime_object_end.isoformat(timespec="milliseconds")
@@ -82,11 +88,13 @@ def period(start, duration):
 
 
 def time_periode(duration, time_start):
+    """Perform the work of time periode."""
     datatime_object_end = time_start + timedelta(minutes=duration)
     return datatime_object_end
 
 
 def transform_date(time):
+    """Process transform date."""
     datetimeisoformat1_re = re.compile(r"(\.\d)(-04)")
     datetimeisoformat2_re = re.compile(r"(\.\d\d)(-04)")
     if datetimeisoformat1_re.search(time):
@@ -98,6 +106,7 @@ def transform_date(time):
 
 
 def get_duration(start, end):
+    """Retrieve get duration."""
     datetime_object_start = transform_date(start)
     datetime_object_end = transform_date(end)
     duration = abs(datetime_object_end - datetime_object_start)
@@ -106,6 +115,7 @@ def get_duration(start, end):
 
 
 def round_duration(start, duration):
+    """Perform the work of round duration."""
     start_dt = transform_date(start)
     minutes = start_dt.minute
     rounded_minutes = str(minutes - (minutes % duration))
@@ -119,6 +129,7 @@ def round_duration(start, duration):
 # W2V ----------------------------------------
 def load_word2vec_model(file):
     # Return model
+    """Retrieve load word2vec model."""
     try:
         model = Word2Vec.load(file)
         return model
@@ -129,6 +140,7 @@ def load_word2vec_model(file):
 
 # ROC ----------------------------------------
 def plot_roc_simple(y_true, y_scores, filename="roc_curve.png"):
+    """Visualize plot roc simple."""
     fpr, tpr, thresholds = roc_curve(y_true, y_scores)
     roc_auc = auc(fpr, tpr)
 
@@ -151,6 +163,7 @@ def plot_roc_simple(y_true, y_scores, filename="roc_curve.png"):
 
 
 def plot_timelapse(folder, clients, f_name, loss, pred, duration):
+    """Visualize plot timelapse."""
     print(len(f_name), len(f_name[0]), len(loss), len(loss[0]), len(pred), len(pred[0]))
     # print(f_name[0], loss[0], pred[0])
     # Couleur pour les boîtes
@@ -288,6 +301,7 @@ def plot_timelapse(folder, clients, f_name, loss, pred, duration):
 
 # GRAPH ----------------------------------------
 def analyze_graphs(clients, graphs):
+    """Perform the work of analyze graphs."""
     data = load_pickle_file(graphs)
 
     nb_nodes = []
@@ -308,6 +322,7 @@ SIDS_CLASS = ["18", "19", "20", "21", "90", "96"]
 
 
 def encoding_parent_son(lst, pipw, ipw):
+    """Perform the work of encoding parent son."""
     if pipw == 0:
         pipw = "0"
     if ipw == 0:
@@ -324,6 +339,7 @@ def encoding_parent_son(lst, pipw, ipw):
 
 
 def encoding_sid(lst):
+    """Perform the work of encoding sid."""
     target = [0 for i in range(len(SIDS_CLASS) + 1)]
     occurrences = Counter(lst)
     result = list(occurrences.items())
@@ -361,6 +377,7 @@ class EarlyStopping:
             self.counter = 0
 
     def save_checkpoint(self, val_loss, model):
+        """Store save checkpoint."""
         torch.save(model.state_dict(), self.path)
 
 
@@ -375,16 +392,19 @@ class LossCustomPlus(nn.Module):
         self.coeff = 1
 
     def forward(self, outputs, inputs):
+        """Perform the work of forward."""
         cont_loss = self.continu_loss(outputs, inputs)
         total_loss = self.weight_cont * cont_loss
         return self.coeff * total_loss
 
     def eval_(self, outputs, inputs):
+        """Perform the work of eval."""
         cont_loss = self.continu_loss_eval(outputs, inputs)
         total_loss = self.weight_cont * cont_loss.numpy()
         return self.coeff * total_loss
 
     def eval(self, outputs, inputs):
+        """Perform the work of eval."""
         cont_loss = self.continu_loss_eval(outputs, inputs)
         total_loss = self.weight_cont * cont_loss.numpy()
         return self.coeff * np.mean(total_loss, axis=1)
@@ -401,17 +421,20 @@ class LossCustom(nn.Module):
         self.coeff = 1
 
     def forward(self, outputs, inputs):
+        """Perform the work of forward."""
         squared_diff = (inputs - outputs) ** 2
         total_loss = self.weight_cont * squared_diff
         return self.coeff * total_loss.mean()
 
     def eval_(self, outputs, inputs):
+        """Perform the work of eval."""
         squared_diff = (inputs.detach().cpu() - outputs.detach().cpu()) ** 2
         total_loss = self.weight_cont * squared_diff
         t = np.mean(total_loss.numpy(), axis=1)
         return self.coeff * t
 
     def eval_device(self, outputs, inputs):
+        """Perform the work of eval device."""
         squared_diff = (inputs - outputs) ** 2
         total_loss = self.weight_cont * squared_diff
         # print(len(inputs), inputs, len(outputs), outputs, len(total_loss), total_loss)
@@ -419,6 +442,7 @@ class LossCustom(nn.Module):
         return self.coeff * t
 
     def eval(self, outputs, inputs):
+        """Perform the work of eval."""
         cont_loss = self.continu_loss_eval(outputs, inputs)
         total_loss = self.weight_cont * cont_loss.numpy()
         return self.coeff * np.mean(total_loss, axis=1)
@@ -431,15 +455,18 @@ class CustomDatasetSimple(Dataset):
         self.max_, self.min_, self.div = self.general_normalize(data, max_, min_)
 
     def set_item_size(self, files):
+        """Store set item size."""
         return len(files[0])
 
     def get_files(self):
+        """Retrieve get files."""
         return self.files
 
     def __len__(self):
         return len(self.data)
 
     def general_normalize(self, data, max, min):
+        """Perform the work of general normalize."""
         if max is None:
             max = np.max(np.asarray(data), axis=0)
         if min is None:
@@ -452,6 +479,7 @@ class CustomDatasetSimple(Dataset):
         return self.normalize(line)
 
     def normalize(self, data):
+        """Perform the work of normalize."""
         data = np.asarray(data)
         with np.errstate(divide="ignore", invalid="ignore"):
             normalized = np.where(self.div == 0, 0, (data - self.min_) / self.div)
@@ -466,6 +494,7 @@ class Autoencoder(nn.Module):
         self.latent_dim = size_input // 4
 
     def forward(self, x):
+        """Perform the work of forward."""
         x_ = self.encoder(x)
         y = self.decoder(x_)
         return x_, y
@@ -480,6 +509,7 @@ class Autoencoder(nn.Module):
         optim,
         scheduler,
     ):
+        """Train train."""
         train_losses = []
         val_losses = []
         val_loss_tot = 0.0
@@ -525,6 +555,7 @@ class Autoencoder(nn.Module):
         return train_losses, val_losses, val_loss_tot, val_loss_last
 
     def eval_(self, test_loader, initloss):
+        """Perform the work of eval."""
         self.eval()
         losses = []
         output = []
@@ -544,12 +575,14 @@ class Autoencoder(nn.Module):
         return eval_loss / len(test_loader), losses, output
 
     def eval_one(self, data):
+        """Perform the work of eval one."""
         self.eval()
         with torch.no_grad():
             latents, _ = self(data)
             return latents[0]
 
     def _build_encoder(self, size_input, dropout_rate):
+        """Create build encoder."""
         return nn.Sequential(
             nn.Linear(size_input, size_input // 2),
             nn.ReLU(),
@@ -558,6 +591,7 @@ class Autoencoder(nn.Module):
         )
 
     def _build_decoder(self, size_input, dropout_rate):
+        """Create build decoder."""
         return nn.Sequential(
             nn.Linear(size_input // 4, size_input // 2),
             nn.ReLU(),
@@ -565,6 +599,7 @@ class Autoencoder(nn.Module):
         )
 
     def get_output_input(self, inputs, outputs):
+        """Retrieve get output input."""
         print(inputs)
 
 
@@ -577,9 +612,11 @@ class AutoencoderPlus(nn.Module):
 
     @property
     def device(self):
+        """Perform the work of device."""
         return next(self.parameters()).device
 
     def forward(self, x):
+        """Perform the work of forward."""
         x_ = self.encoder(x)
         y_ = self.decoder(x_)
         y = self.mlp(y_)
@@ -595,6 +632,7 @@ class AutoencoderPlus(nn.Module):
         optim,
         scheduler,
     ):
+        """Train train."""
         train_losses = []
         val_losses = []
         val_loss_tot = 0.0
@@ -641,6 +679,7 @@ class AutoencoderPlus(nn.Module):
         return train_losses, val_losses, val_loss_tot, np.mean(val_loss_last, axis=1)
 
     def eval_(self, test_loader, initloss):
+        """Perform the work of eval."""
         self.eval()
         losses = []
         output = []
@@ -658,6 +697,7 @@ class AutoencoderPlus(nn.Module):
         return eval_loss / len(test_loader), losses, output
 
     def eval_combine(self, test_loader, initloss, index):
+        """Perform the work of eval combine."""
         self.eval()
         losses = []
         with torch.no_grad():
@@ -670,6 +710,7 @@ class AutoencoderPlus(nn.Module):
         return losses
 
     def _build_encoder(self, size_input, dropout_rate):
+        """Create build encoder."""
         return nn.Sequential(
             nn.Linear(size_input, size_input // 2),
             # nn.BatchNorm1d(size_input // 2),
@@ -684,6 +725,7 @@ class AutoencoderPlus(nn.Module):
         )
 
     def _build_decoder(self, size_input, dropout_rate):
+        """Create build decoder."""
         return nn.Sequential(
             # nn.Linear(25, 50),
             # nn.BatchNorm1d(50),
@@ -697,9 +739,11 @@ class AutoencoderPlus(nn.Module):
         )
 
     def _build_mlp(self, size_input):
+        """Create build mlp."""
         return nn.Sequential(nn.ReLU(), nn.Linear(size_input, size_input))
 
     def get_output_input(self, inputs, outputs):
+        """Retrieve get output input."""
         for i in range(len(inputs)):
             print(inputs[i], outputs[i])
             break
@@ -1189,6 +1233,7 @@ class NegativeEdgeSampler(object):
         )
 
     def _encode_edges(self, src_node_ids: np.ndarray, dst_node_ids: np.ndarray):
+        """Perform the work of encode edges."""
         src = src_node_ids.astype(np.int64)
         dst = dst_node_ids.astype(np.int64)
         if not hasattr(self, "_edge_code_multiplier"):
@@ -1196,6 +1241,7 @@ class NegativeEdgeSampler(object):
         return src * np.int64(self._edge_code_multiplier) + dst
 
     def _decode_edge_codes(self, edge_codes: np.ndarray):
+        """Perform the work of decode edge codes."""
         edge_codes = edge_codes.astype(np.int64)
         src_node_ids = edge_codes // np.int64(self._edge_code_multiplier)
         dst_node_ids = edge_codes % np.int64(self._edge_code_multiplier)

@@ -38,6 +38,7 @@ def compute_2hop_non_neighbors(csv_path: str, output_csv_path: Optional[str] = N
     pending_edges = []  # edges to add after processing current timestamp group
 
     def add_edges_to_graph(edges):
+        """Add the current batch of edges to the temporary graph view."""
         for u, v in edges:
             neighbors[u].add(v)
             neighbors[v].add(u)
@@ -88,6 +89,7 @@ def compute_2hop_non_neighbors(csv_path: str, output_csv_path: Optional[str] = N
     return output_csv_path
 
 def main( dataset, clients) -> None:
+    """Perform the work of main."""
     for client in clients:
         print(f"Processing client {client} for dataset {dataset}")
         neighbor_csv_path = Path(BASE) / "processed_data" / f"{dataset}_{client}" / f"ml_{dataset}_{client}.csv"

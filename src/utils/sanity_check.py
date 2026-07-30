@@ -2,9 +2,11 @@ import numpy as np
 
 
 def get_nodes_from_data(d):
+    """Retrieve get nodes from data."""
     return set(d.src_node_ids) | set(d.dst_node_ids)
 
 def get_edges_from_data(d):
+    """Retrieve get edges from data."""
     return set(zip(d.src_node_ids, d.dst_node_ids))
 
 def get_stats_by_node(d, nodes):
@@ -15,6 +17,7 @@ def get_stats_by_node(d, nodes):
     # - number of distinct timestamp
     # - timestamp delta between the first and last timestamp
     # return a dictionary
+    """Retrieve get stats by node."""
     src_node_ids = np.asarray(d.src_node_ids)
     dst_node_ids = np.asarray(d.dst_node_ids)
     timestamps = np.asarray(d.node_interact_times)
@@ -60,6 +63,7 @@ def get_stats_by_node(d, nodes):
       
 
 def stats(name, nodes, edges, num_edges):
+    """Perform the work of stats."""
     return {
         "split": name,
         "num_edges": num_edges,
@@ -69,6 +73,7 @@ def stats(name, nodes, edges, num_edges):
 
 
 def _print_distribution(name, values):
+    """Perform the work of print distribution."""
     values = np.asarray(values, dtype=np.float64)
     if values.size == 0:
         print(f"    {name}: empty")
@@ -86,6 +91,7 @@ def _print_distribution(name, values):
 
 def compute_sanity_check(train_data, val_data, test_data):
 
+    """Compute compute sanity check."""
     train_nodes = get_nodes_from_data(train_data)
     val_nodes = get_nodes_from_data(val_data)
     test_nodes = get_nodes_from_data(test_data)
