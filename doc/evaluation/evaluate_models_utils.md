@@ -8,12 +8,12 @@ It contains different functions to evaluate link prediction models
 - store the scores
 
 ## Inputs
-- [ ] Describe required inputs, parameters, or configuration values.
-- [ ] Note any expected file formats, data structures, or environment assumptions.
+-  Describe required inputs, parameters, or configuration values.
+-  Note any expected file formats, data structures, or environment assumptions.
 
 ## Outputs
-- [ ] Describe produced results, artifacts, or return values.
-- [ ] Mention any files written, metrics computed, or models trained.
+-  Describe produced results, artifacts, or return values.
+-  Mention any files written, metrics computed, or models trained.
 
 ## Key Components
 ### Functions / Classes

@@ -4,13 +4,13 @@
 This script compute the metrics and plots for the link prediction task and the anomaly detection task.
 
 ## Responsibilities
-- [ ] compute link_prediction metrics from the validation results
-- [ ] compute anomaly detection metrics from the test results at the edge and graph level
-- [ ] store the most badly predicted data (false positive, false negative) by the model in a file for the validation and test set.
-- [ ] compute miscoverage rate if calibration is selected.
+-  compute link_prediction metrics from the validation results
+-  compute anomaly detection metrics from the test results at the edge and graph level
+-  store the most badly predicted data (false positive, false negative) by the model in a file for the validation and test set.
+-  compute miscoverage rate if calibration is selected.
 
 ## Inputs
-- [ ] load the validation, test and calibration results if calibration is selected.
+-  load the validation, test and calibration results if calibration is selected.
 
 ## Outputs
 - link prediction results at the edge level
