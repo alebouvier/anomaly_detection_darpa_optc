@@ -65,6 +65,7 @@ python src/optc_ad.py -t test_anomaly_detection
 
 the data folder contains all the necessary raw and intermediate data for teh executions. 
 
+<pre>
 data/
 ├── feature_data
 │   ├── bert128_training
@@ -86,6 +87,7 @@ data/
 └── val_result_data
     ├── optc_051
     └── optc_201
+</pre>
 
 * log_data: should contain the raw json/json.gz log data 
 * label_data: should contain malicious.json (the malicious logs)
@@ -110,6 +112,7 @@ data/
 
 The experiments folder contains all the trained link prediction model, the monitoring information about the training (loss curve, ...), the metrics and plots for the link prediction and anomaly detection task.
 
+<pre>
 experiments/
 ├── optc_051
 │   ├── dygformer
@@ -119,7 +122,9 @@ experiments/
     ├── dygformer
     ├── graphmixer
     └── tgat
+</pre>
 
+<pre>
 experiments/optc_051/dygformer/
 ├── 2hop_neighbor_negative_sampling_DyGFormer_seed0
 │   └── logs
@@ -141,6 +146,7 @@ experiments/optc_051/dygformer/
 ├── saved_results
 ├── visualisation
 └── weird_predictions
+</pre>
 
 * after train_link_ano_insertion
     * DyGFormer_seed0: 
