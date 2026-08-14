@@ -17,7 +17,7 @@ from utils.utils import load_pickle_file, open_config
 
 
 def preprocess_path(line, cfg):
-    """Perform the work of preprocess path."""
+    """Normalize a path-like string and split it into its logical components."""
     line_treatmnt = line.replace("\\", "/")  # Normalize path
     line_treatmnt = re.sub(
         re.compile(cfg["MODEL"]["HARD_DEVICE"]),
@@ -46,7 +46,7 @@ def preprocess_path(line, cfg):
 
 
 def preprocess_command_line(line, cfg):
-    """Perform the work of preprocess command line."""
+    """Split a command line into tokenized path and argument fragments."""
     data_lst_complet = []
     m = re.compile(cfg["MODEL"]["SPLIT_PATH_COMMAND_LINE"])
     data_lst = re.findall(m, line)
@@ -73,7 +73,7 @@ def preprocess_command_line(line, cfg):
 
 
 def eval_for_encoding(tokenizer, model, data, is_command, cfg):
-    """Perform the work of eval for encoding."""
+    """Encode a path or command line into the model embedding space."""
     if data == 0:
         return np.zeros(cfg["MODEL"]["LEN_ENCODE_PATH"])
     else:
@@ -91,7 +91,7 @@ def eval_for_encoding(tokenizer, model, data, is_command, cfg):
 
 
 def eval_function_coeff_path_2combine(enc, last, h, k):
-    """Perform the work of eval function coeff path 2combine."""
+    """Blend the embedding with a position-dependent coefficient along the path."""
     b = 1
     if k < len(h) - last:
         res = ((-b / (len(h) + 1)) * k + b) * enc
@@ -101,7 +101,7 @@ def eval_function_coeff_path_2combine(enc, last, h, k):
 
 
 def eval_function_coeff_path_decrois_geo(enc, last, h, k, ulast, q=0.1):
-    """Perform the work of eval function coeff path decrois geo."""
+    """Apply the geometric decay rule to weight the current path embedding."""
     if k < len(h) - last:
         res = (q * ulast) * enc
     else:
@@ -110,12 +110,12 @@ def eval_function_coeff_path_decrois_geo(enc, last, h, k, ulast, q=0.1):
 
 
 def eval_function_coeff_path_const(enc):
-    """Perform the work of eval function coeff path const."""
+    """Return the embedding unchanged."""
     return enc
 
 
 def get_sequence_embedding(sequence: str, tokenizer, model) -> torch.Tensor:
-    """Retrieve get sequence embedding."""
+    """Extract the contextual embedding for a tokenized input sequence."""
     inputs = tokenizer(sequence, return_tensors="pt")
 
     with torch.no_grad():
@@ -127,7 +127,7 @@ def get_sequence_embedding(sequence: str, tokenizer, model) -> torch.Tensor:
 
 
 def encode_text(tokenizer, model, text, cfg):
-    """Perform the work of encode text."""
+    """Encode text into a fixed-length vector for downstream feature extraction."""
     if text is None or text == 0 or text == "":
         return np.zeros(cfg["MODEL"]["LEN_ENCODE_PATH"])
     seq_embedding = get_sequence_embedding(text, tokenizer, model)
@@ -135,7 +135,7 @@ def encode_text(tokenizer, model, text, cfg):
 
 
 def eval(tokenizer, model, data, is_command, cfg, f="const", q=0.1):
-    """Perform the work of eval."""
+    """Aggregate a path's token embeddings and return the combined representation."""
     h = data[0]
     ext = data[1]
     if ext:

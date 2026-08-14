@@ -18,7 +18,7 @@ ACTION_TYPES = ["OPEN", "CREATE", "TERMINATE", "MODIFY", "WRITE", "RENAME", "REA
 
 
 def read_line_csv_file(path: Path) -> Iterator[list]:
-    """Retrieve read line csv file."""
+    """Yield non-empty rows from a CSV file one line at a time."""
     mode = "rt" if path.suffix == ".gz" else "r"
     if path.suffix == ".gz":
         f = gzip.open(path, mode=mode, newline="")
@@ -35,7 +35,7 @@ def read_line_csv_file(path: Path) -> Iterator[list]:
 
 
 def count_csv_rows(path: Path) -> int:
-    """Perform the work of count csv rows."""
+    """Count valid rows in the CSV after skipping the header."""
     mode = "rt" if path.suffix == ".gz" else "r"
     if path.suffix == ".gz":
         f = gzip.open(path, mode=mode, newline="")
@@ -49,7 +49,7 @@ def count_csv_rows(path: Path) -> int:
 
 
 def one_hot_encoding(type_info: str, is_edge: bool) -> List[int]:
-    """Perform the work of one hot encoding."""
+    """Convert a node or edge type into a one-hot feature vector."""
     classes = ACTION_TYPES if is_edge else OBJECT_TYPES
     features = [0] * len(classes)
     if type_info in classes:
@@ -58,7 +58,7 @@ def one_hot_encoding(type_info: str, is_edge: bool) -> List[int]:
 
 
 def build_text_sequence(raw_line: str, cfg) -> str:
-    """Create build text sequence."""
+    """Build a single text string from the preprocessed path-command tokens."""
     if raw_line is None:
         return ""
 
@@ -71,7 +71,7 @@ def build_text_sequence(raw_line: str, cfg) -> str:
 
 
 def w2v_encoding(model, cmd_path_info, cfg):
-    """Perform the work of w2v encoding."""
+    """Encode a command-path value with the Word2Vec model."""
     if not pd.isna(cmd_path_info):
         return eval_for_encoding(model, cmd_path_info, cfg).tolist()
     else:
@@ -79,7 +79,7 @@ def w2v_encoding(model, cmd_path_info, cfg):
 
 
 def bert_encoding(tokenizer, model, cmd_path_info, cfg):
-    """Perform the work of bert encoding."""
+    """Encode a command-path value with the BERT model when it is available."""
     if pd.isna(cmd_path_info) or cmd_path_info in (None, "", 0):
         return [0] * cfg["MODEL"]["LEN_ENCODE_PATH"]
 
@@ -102,7 +102,7 @@ def create_features(
     bert_tokenizer=None,
     bert_model=None,
 ) -> np.ndarray:
-    """Create create features."""
+    """Create the feature matrix for all rows in a processed dataset."""
     dim_type = len(ACTION_TYPES) if is_edge else len(OBJECT_TYPES)
     dim = dim_type + cfg["MODEL"]["LEN_ENCODE_PATH"]
     create_folder(output_path.parent)
@@ -138,7 +138,7 @@ def create_features(
 
 
 def save_processed_data(output_dir: Path, dataset, client, edge_features: np.ndarray, node_features: np.ndarray) -> None:
-    """Store save processed data."""
+    """Persist the generated edge and node feature arrays to disk."""
     create_folder(output_dir)
     np.save(output_dir / f"ml_{dataset}_{client}.npy", edge_features)
     np.save(output_dir / f"ml_{dataset}_{client}_node.npy", node_features)
@@ -154,7 +154,7 @@ def process_client(
     bert_tokenizer=None,
     bert_model=None,
 ) -> None:
-    """Process process client."""
+    """Generate processed feature arrays for one client dataset."""
     input_dir = Path(BASE) / "processed_data" / f"{dataset}_{client}"
 
     if model_type.lower() == "no":
@@ -202,7 +202,7 @@ def process_client(
 
 
 def main(dataset, clients, model_type: str = "w2v", bert_dir: str | None = None) -> None:
-    """Perform the work of main."""
+    """Process all clients for a dataset with the requested embedding model."""
     cfg = open_config(dataset)
 
     use_type = True

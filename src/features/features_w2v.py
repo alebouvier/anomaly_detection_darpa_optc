@@ -30,7 +30,7 @@ class Encoding_builder:
             self.model_cmd_line = load_word2vec_model(model.replace("path", "cmd"))
 
     def build_encoding(self):
-        """Build node and edge features for the graph."""
+        """Assemble the final node and edge feature matrices for the graph."""
 
         node_types = set(
             data.get("type_") for _, data in self.g.nodes(data=True) if "type_" in data
@@ -83,7 +83,7 @@ class Encoding_builder:
         return features_g, features_e
 
     def mean_path(self, lst):
-        """Return the mean feature vector for a list of paths."""
+        """Average the embeddings for a list of related paths into one vector."""
         if len(lst) > 0:
             return np.mean(lst, axis=0)
         else:
@@ -92,7 +92,7 @@ class Encoding_builder:
     def encoding_process(self, g, nodes):
         # graph
         image_paths = []
-        """Perform the work of encoding process."""
+        """Build process-level embeddings from image paths and metadata."""
         parent_image_paths = []
         command_line_paths = []
         sids = []
@@ -198,7 +198,7 @@ class Encoding_builder:
 
     def lifetimenodes(self, nodes):
         min_life = 15
-        """Perform the work of lifetimenodes."""
+        """Compute lifetime summary statistics for each node in the graph."""
         max_life = 0
         sum_life = 0
 
@@ -216,7 +216,7 @@ class Encoding_builder:
 
     def freq_time_mean(self, node_freq):
         a = []
-        """Perform the work of freq time mean."""
+        """Average the frequency values stored for each node-type bucket."""
         for _, freq in node_freq.items():
             if len(freq) < 1:
                 a.append(0)
@@ -226,7 +226,7 @@ class Encoding_builder:
 
     def node_time_for_node_type(self, g, nodes):
         node_time_out_freq = {}
-        """Perform the work of node time for node type."""
+        """Aggregate time-based statistics per node type for incoming and outgoing edges."""
         node_time_in_freq = {}
 
         for type_ in self.cfg["MODEL"]["NODES_TYPES_ALL"]:
@@ -263,7 +263,7 @@ class Encoding_builder:
         return features_g, features_e
 
     def freq_time(self, edges, out, node_time_freq):
-        """Collect lifetime values for edges grouped by node type."""
+        """Group each edge's lifetime by the neighboring node type for later aggregation."""
         for edge in edges:
             if out:
                 node_type = type(edge[1]).__name__
@@ -340,7 +340,7 @@ class Encoding_builder:
         return features_g, features_e
 
     def freq_(self, edges, out, edge_types_freq, node_types_freq):
-        """Count edge and node type frequencies for the supplied edges."""
+        """Count incoming and outgoing edge and node type frequencies for the given edges."""
         for edge in edges:
             edge_type = edge[2]["action"]
             if edge_type in edge_types_freq:
@@ -361,21 +361,21 @@ class Encoding_builder:
 
     def set_g(self, g):
         self.g = g
-        """Store set g."""
+        """Set the active graph used for feature extraction."""
         return g
 
     def set_encoding_size(self, encoding_size):
         self.encoding_size = encoding_size
-        """Store set encoding size."""
+        """Set the expected size of the graph encoding."""
         return encoding_size
 
     def info(self):
         return f"Graph {self.g}."
-        """Perform the work of info."""
+        """Return a compact description of the current graph."""
 
 
 def main(clients, graphs, model_w2v_path, dataset, g=False, e=False):
-    """Perform the work of main."""
+    """Generate graph and edge features for the clients in the dataset."""
     utils_dataset = importlib.import_module(f"data.{dataset}_utils")
     cfg_dataset = open_config(dataset)
 

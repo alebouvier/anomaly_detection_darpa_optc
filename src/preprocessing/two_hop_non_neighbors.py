@@ -89,7 +89,7 @@ def compute_2hop_non_neighbors(csv_path: str, output_csv_path: Optional[str] = N
     return output_csv_path
 
 def main( dataset, clients) -> None:
-    """Perform the work of main."""
+    """Build the 2-hop non-neighbor tables for all requested clients."""
     for client in clients:
         print(f"Processing client {client} for dataset {dataset}")
         neighbor_csv_path = Path(BASE) / "processed_data" / f"{dataset}_{client}" / f"ml_{dataset}_{client}.csv"

@@ -66,7 +66,7 @@ def preprocess_path(line, cfg):
 
 
 def preprocess(line, cfg):
-    """Perform the work of preprocess."""
+    """Convert a path or command-line string into a token list."""
     data_lst_complet = []
     m = re.compile(cfg["MODEL"]["SPLIT_PATH_COMMAND_LINE"])
     data_lst = re.findall(m, line)
@@ -95,7 +95,7 @@ def preprocess(line, cfg):
 
 
 def train_val(data_train, cfg):
-    """Train train val."""
+    """Train a Word2Vec model on the preprocessed token sequences."""
     epochs = 100
     model = gensim.models.Word2Vec(
         vector_size=cfg["MODEL"]["LEN_ENCODE_PATH"],
@@ -117,7 +117,7 @@ def train_val(data_train, cfg):
 
 
 def eval_for_encoding(model, data, cfg):
-    """Perform the work of eval for encoding."""
+    """Encode one path or command string with the trained Word2Vec model."""
     if data == 0:
         return np.zeros(cfg["MODEL"]["LEN_ENCODE_PATH"])
     else:
@@ -130,7 +130,7 @@ def eval_for_encoding(model, data, cfg):
 
 
 def eval_unknown(lst, unkown_index, h, model, last, cfg):
-    """Perform the work of eval unknown."""
+    """Estimate embeddings for unknown tokens using neighboring contexts."""
     index = 1
     p = 0
     new_keys = []
@@ -194,7 +194,7 @@ def eval_unknown(lst, unkown_index, h, model, last, cfg):
 
 
 def eval_function_coeff_path_2combine(enc, last, h, k):
-    """Perform the work of eval function coeff path 2combine."""
+    """Apply the combined decay function to a token embedding."""
     b = 1
     if k < len(h) - last:
         res = ((-b / (len(h) + 1)) * k + b) * enc
@@ -204,7 +204,7 @@ def eval_function_coeff_path_2combine(enc, last, h, k):
 
 
 def eval_function_coeff_path_decrois_geo(enc, last, h, k, ulast, q=0.1):
-    """Perform the work of eval function coeff path decrois geo."""
+    """Apply the geometric decay rule to the current path embedding."""
     if k < len(h) - last:
         res = (q * ulast) * enc
     else:
@@ -213,12 +213,12 @@ def eval_function_coeff_path_decrois_geo(enc, last, h, k, ulast, q=0.1):
 
 
 def eval_function_coeff_path_const(enc):
-    """Perform the work of eval function coeff path const."""
+    """Return the embedding unchanged."""
     return enc
 
 
 def eval(model, data, cfg, f="const", q=0.1):
-    """Perform the work of eval."""
+    """Aggregate the token embeddings for a path into a single representation."""
     h = data[0]
     ext = data[1]
     if ext:
@@ -258,7 +258,7 @@ def eval(model, data, cfg, f="const", q=0.1):
 
 def main( clients, data, batch=64, sampled_content_file=0.01
 ):
-    """Perform the work of main."""
+    """Train the Word2Vec model for the requested dataset and client subset."""
     cfg = open_config(data)
     ft = []
     for c in clients:

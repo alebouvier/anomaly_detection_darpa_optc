@@ -219,7 +219,7 @@ def print_results(dataset_name, model_name, metrics, conf_evaluator, mode, level
         plt.close(fig)
 
 def link_prediciton_metrics(predicted_links, actual_links, non_exist_links, conf_evaluator, names):
-    """Perform the work of link prediciton metrics."""
+    """Compute standard link-prediction metrics and calibration diagnostics for a dataset/model pair."""
     dataset_name, model_name = names
 
     # y_score are scores predicited by the model
@@ -282,7 +282,7 @@ def link_prediciton_metrics(predicted_links, actual_links, non_exist_links, conf
     print_results(dataset_name, model_name, metrics, conf_evaluator, mode="link_prediction")
 
 def anomaly_detection_edge_level_metrics(predicted_links, actual_links, non_exist_links, conf_evaluator, names):
-    """Perform the work of anomaly detection edge level metrics."""
+    """Evaluate edge-level anomaly detection with AUC, precision, and conformal coverage checks."""
     dataset_name, model_name = names
     score_map = {(src, dst, ts): 1 - score for src, dst, score, ts in predicted_links}
 
@@ -346,7 +346,7 @@ def anomaly_detection_edge_level_metrics(predicted_links, actual_links, non_exis
     print_results(dataset_name, model_name, metrics, conf_evaluator, mode="anomaly_detection")
 
 def anomaly_detection_graph_level_metrics(predicted_links, actual_links, non_exist_links, conf_evaluator, names):
-    """Perform the work of anomaly detection graph level metrics."""
+    """Aggregate timestamp-level scores and evaluate anomaly detection at the graph level."""
     dataset_name, model_name = names
     
 
@@ -404,7 +404,7 @@ def anomaly_detection_graph_level_metrics(predicted_links, actual_links, non_exi
     print_results(dataset_name, model_name, metrics, None, "anomaly_detection", level="graph")
 
 def load_results(folder, mode):
-    """Retrieve load results."""
+    """Load the saved prediction, ground-truth, and negative-sample artifacts for a split."""
     predicted_links = load_pickle_file(f"{folder}/{mode}_predicted_links.pkl")
     actual_links = load_pickle_file(f"{folder}/{mode}_actual_links.pkl")
     non_exist_links = load_pickle_file(f"{folder}/non_exist_links.pkl")
@@ -413,7 +413,7 @@ def load_results(folder, mode):
 
 def check_weird_predictions(predicted_links, actual_links, non_exist_links, names, output_file=None):
     # find index of existing links with lowest scores and non-existing links with highest scores
-    """Check check weird predictions."""
+    """Write a diagnostic report of the most suspicious positive and negative predictions."""
     dataset_name, model_name = names
     predicted_links_sorted = sorted(predicted_links, key=lambda x: x[2])
     non_exist_links_sorted = sorted(non_exist_links, key=lambda x: x[2], reverse=True)
@@ -428,7 +428,6 @@ def check_weird_predictions(predicted_links, actual_links, non_exist_links, name
 
     
     # node_features.csv has 2 columns: object_type and path. The node ids correspond to the row number in the csv file. We will save the features of the weird predictions in a text file with the following format:
-
 
     output_folder = f"experiments/{dataset_name}/{model_name.lower()}/weird_predictions"
     create_folder(output_folder)
@@ -465,7 +464,7 @@ def check_weird_predictions(predicted_links, actual_links, non_exist_links, name
 
 
 def main(args):
-    """Perform the work of main."""
+    """Run the full anomaly-detection evaluation workflow for validation and test splits."""
     output_folder = f"experiments/{args.dataset_name}/{args.model_name.lower()}/ad_results"
     create_folder(output_folder)
 

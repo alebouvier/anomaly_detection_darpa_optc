@@ -39,7 +39,7 @@ class PathCommandDataset(Dataset):
 
 
 def preprocess_path(line: str, cfg: dict):
-    """Perform the work of preprocess path."""
+    """Normalize and split a path-like string into its logical tokens."""
     line_treatmnt = line.replace("\\", "/")
     line_treatmnt = re.sub(
         re.compile(cfg["MODEL"]["HARD_DEVICE"]),
@@ -60,7 +60,7 @@ def preprocess_path(line: str, cfg: dict):
 
 
 def preprocess(line: str, cfg: dict):
-    """Perform the work of preprocess."""
+    """Convert a path or command-line string into a token list."""
     data_lst_complet: List[str] = []
     m = re.compile(cfg["MODEL"]["SPLIT_PATH_COMMAND_LINE"])
     data_lst = re.findall(m, line)
@@ -82,7 +82,7 @@ def preprocess(line: str, cfg: dict):
 
 
 def normalize_text_item(item: Union[str, List[str]]) -> str:
-    """Perform the work of normalize text item."""
+    """Convert a text item to a flat string while handling list inputs."""
     if isinstance(item, (list, tuple)) and len(item) > 0:
         return item[0]
     if item is None:
@@ -101,7 +101,7 @@ def build_text_sequence(raw_line: str, cfg: dict) -> str:
 
 
 def get_sequence_embedding(sequence: str, tokenizer, model) -> torch.Tensor:
-    """Retrieve get sequence embedding."""
+    """Extract the contextual embedding for a tokenized input sequence."""
     inputs = tokenizer(sequence, return_tensors="pt")
 
     # move inputs to model device if model on GPU
@@ -152,7 +152,7 @@ def encode_text(tokenizer, model, text, cfg):
 
 
 def collect_texts(clients: List[str], data: str, sampled_content_file: float, cfg: dict) -> List[str]:
-    """Perform the work of collect texts."""
+    """Collect a sampled set of processed texts from the training clients."""
     texts: List[str] = []
     for client in clients:
         preprocessing_folder = f"{BASE}/processed_data/{data}_{client}"
@@ -176,7 +176,7 @@ def train_bert128(
     batch_size: int = 32,
     output_dir: str | None = None,
 ):
-    """Train train bert128."""
+    """Fine-tune a BERT model on path and command-line text samples."""
     cfg = open_config(data)
     if output_dir is None:
         output_dir = f"{BASE}/feature_data/Bert_ft"
@@ -225,7 +225,7 @@ def train_bert128(
 
 
 def main(clients, data, sampled_content_file=0.01, epochs=3, batch_size=32):
-    """Perform the work of main."""
+    """Train the BERT model for the selected dataset and client set."""
     return train_bert128(
         clients=clients,
         data=data,

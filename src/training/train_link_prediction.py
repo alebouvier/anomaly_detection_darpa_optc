@@ -35,7 +35,7 @@ from utils.EarlyStopping import EarlyStopping
 
 def main(args):
 
-    """Perform the work of main."""
+    """Train the link-prediction model for the selected dataset and evaluation setup."""
     warnings.filterwarnings("ignore")
 
     # get data for training, validation and testing
