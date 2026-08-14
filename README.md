@@ -2,7 +2,7 @@
 
 The project consists in detecting malicious events in the OpTC dataset leveraging link prediction methods for temporal graphs data.
 
-This git repository contains a full pipeline from data prepocessing, link_prediction model training and anomaly detection.
+This git repository contains a full pipeline from data prepocessing, link prediction model training and anomaly detection.
 
 ## project origin and development
 
@@ -31,10 +31,6 @@ Every task can be launched by executing the script optc_ad.py with different arg
 python src/optc_ad.py -t preprocessing
 ```
 
-* Extract temporal pattern from the attack present in test data and incorporate them into train data 
-```shell
-python src/optc_ad.py -t temporal_pattern
-```
 
 * Fine-tuned a BERT model on textual node and edge features
 ```shell
@@ -46,14 +42,14 @@ python src/optc_ad.py -t train_bert128
 python src/optc_ad.py -t  feature_bert
 ```
 
-* Train a link prediction model using inserted anomaly patterns as negative sampling.
+* Train a link prediction model using the diffusion model to create negatives.
 ```shell
-python src/optc_ad.py -t train_link_prediction_ano_insertion --num_epochs 1 --negative_sample_strategy random
+python src/optc_ad.py -t train_link_prediction_diffusion --num_epochs 1 --negative_sample_strategy random
 ```
 
 * Evaluate the model on validation and test data
 ```shell
-python src/optc_ad.py -t validate_link_prediction_ano_insertion --num_epochs 1 --negative_sample_strategy random
+python src/optc_ad.py -t validate_link_prediction_diffusion --num_epochs 1 --negative_sample_strategy random
 ```
 
 * Compute metrics for the link prediction task and the anomaly detection task.
@@ -65,6 +61,7 @@ python src/optc_ad.py -t test_anomaly_detection
 
 the data folder contains all the necessary raw and intermediate data for teh executions. 
 
+<pre>
 data/
 ├── feature_data
 │   ├── bert128_training
@@ -86,6 +83,7 @@ data/
 └── val_result_data
     ├── optc_051
     └── optc_201
+</pre>
 
 * log_data: should contain the raw json/json.gz log data 
 * label_data: should contain malicious.json (the malicious logs)
@@ -95,12 +93,12 @@ data/
 * feature_data: 
     * after train_w2v or train_bert128: contains the trained model in a pt file.
 * val_result_data:
-    * after validate_link_prediction_ano_insertion: contains 3 pkl files containing the predictions for the validation data
+    * after validate_link_prediction_diffusion: contains 3 pkl files containing the predictions for the validation data
 * test_result_data:
-    * after validate_link_prediction_ano_insertion: contains 3 pkl files containing the predictions for the test data
+    * after validate_link_prediction_diffusion: contains 3 pkl files containing the predictions for the test data
 * temporal_embeddings_data:
-    * after train_link_prediction_ano_insertion: contains the temporal embeddings of the train data and of the negative sampling
-    * after validate_link_predicition_ano_insertion: contains the temporal embeddings of the validation and test data and of the negative sampling.
+    * after train_link_prediction_diffusion: contains the temporal embeddings of the train data and of the negative sampling
+    * after validate_link_predicition: contains the temporal embeddings of the validation and test data and of the negative sampling.
 * profiler_data:
     * after an execution: contains the execution profile (can be seen with snakeviz)
 
@@ -110,6 +108,7 @@ data/
 
 The experiments folder contains all the trained link prediction model, the monitoring information about the training (loss curve, ...), the metrics and plots for the link prediction and anomaly detection task.
 
+<pre>
 experiments/
 ├── optc_051
 │   ├── dygformer
@@ -119,7 +118,9 @@ experiments/
     ├── dygformer
     ├── graphmixer
     └── tgat
+</pre>
 
+<pre>
 experiments/optc_051/dygformer/
 ├── 2hop_neighbor_negative_sampling_DyGFormer_seed0
 │   └── logs
@@ -141,15 +142,16 @@ experiments/optc_051/dygformer/
 ├── saved_results
 ├── visualisation
 └── weird_predictions
+</pre>
 
-* after train_link_ano_insertion
+* after train_link_prediction_diffusion
     * DyGFormer_seed0: 
         * logs: contains a log file with information on the training
         * loss: contains loss curve and csv file of the training
         * saved_models: contains the trained model
 
 * after test_anomaly_detection
-    * link_prediction:
+    * link_prediction_diffusion:
         * a report file showing the metrics for the link prediction task (computed on validation set)
         * plots (ROC, AP curve, calibration)
     * anomaly_detection
