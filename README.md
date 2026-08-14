@@ -1,93 +1,163 @@
 # optc_ad_project
 
+The project consists in detecting malicious events in the OpTC dataset leveraging link prediction methods for temporal graphs data.
+
+This git repository contains a full pipeline from data prepocessing, link_prediction model training and anomaly detection.
+
+## project origin and development
+
+This project is based on the DyGLib library (a library implementing multiple temporal graph learning methods), a previous work from Florent Cheyron and the GRAAL project from Fanny Dijoub.
+
+As many hypothesis and experiments have been tested during the implementation of the pipeline and as it has not been completely cleaned. Some portions of code or even entire scripts may be unused in the pipeline or obsolete.
 
 
-## Getting started
+## git organisation
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+Several branches are present in the git repository.
+- main
+- temporal_patterns: implement the insertion of test anomalies in the train data.
+- model_diffusion: implement model diffusion for negative sampling generation
+- visualisation: implement Umap visualisations (the visualisations are also implemented in the branch temporal_patterns)
+- preproc_improvement: obsolete
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## pipeline description
 
-## Add your files
+## examples of execution
 
-* [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+Every task can be launched by executing the script optc_ad.py with different arguments.
 
+* Transform raw log data into 3 csv files (egdes list, node features, edge features)
+```shell
+python src/optc_ad.py -t preprocessing
 ```
-cd existing_repo
-git remote add origin https://gitlab.inria.fr/albouvie/optc_ad_project.git
-git branch -M main
-git push -uf origin main
+
+* Extract temporal pattern from the attack present in test data and incorporate them into train data 
+```shell
+python src/optc_ad.py -t temporal_pattern
 ```
 
-## Integrate with your tools
+* Fine-tuned a BERT model on textual node and edge features
+```shell
+python src/optc_ad.py -t train_bert128
+```
 
-* [Set up project integrations](https://gitlab.inria.fr/albouvie/optc_ad_project/-/settings/integrations)
+* Create embedding from textual information
+```shell
+python src/optc_ad.py -t  feature_bert
+```
 
-## Collaborate with your team
+* Train a link prediction model using inserted anomaly patterns as negative sampling.
+```shell
+python src/optc_ad.py -t train_link_prediction_ano_insertion --num_epochs 1 --negative_sample_strategy random
+```
 
-* [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+* Evaluate the model on validation and test data
+```shell
+python src/optc_ad.py -t validate_link_prediction_ano_insertion --num_epochs 1 --negative_sample_strategy random
+```
 
-## Test and Deploy
+* Compute metrics for the link prediction task and the anomaly detection task.
+```shell
+python src/optc_ad.py -t test_anomaly_detection
+```
 
-Use the built-in continuous integration in GitLab.
+## Data organisation
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+the data folder contains all the necessary raw and intermediate data for teh executions. 
 
-***
+data/
+├── feature_data
+│   ├── bert128_training
+│   ├── Bert_ft
+│   ├── optc_051
+│   └── optc_201
+├── label_data
+├── log_data
+├── processed_data
+│   ├── optc_051
+│   └── optc_201
+├── profiler_data
+├── temporal_embeddings_data
+│   └── optc_051
+│   └── optc_201
+├── test_result_data
+│   ├── optc_051
+│   └── optc_201
+└── val_result_data
+    ├── optc_051
+    └── optc_201
 
-# Editing this README
+* log_data: should contain the raw json/json.gz log data 
+* label_data: should contain malicious.json (the malicious logs)
+* processed_data: 
+    * after the preprocessing task: contains the edge list, the raw node features and the raw edge features
+    * after the feature_bert task: contains the embedded raw node and edge features
+* feature_data: 
+    * after train_w2v or train_bert128: contains the trained model in a pt file.
+* val_result_data:
+    * after validate_link_prediction_ano_insertion: contains 3 pkl files containing the predictions for the validation data
+* test_result_data:
+    * after validate_link_prediction_ano_insertion: contains 3 pkl files containing the predictions for the test data
+* temporal_embeddings_data:
+    * after train_link_prediction_ano_insertion: contains the temporal embeddings of the train data and of the negative sampling
+    * after validate_link_predicition_ano_insertion: contains the temporal embeddings of the validation and test data and of the negative sampling.
+* profiler_data:
+    * after an execution: contains the execution profile (can be seen with snakeviz)
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
 
-## Suggestions for a good README
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+## experiments organisation
 
-## Name
-Choose a self-explaining name for your project.
+The experiments folder contains all the trained link prediction model, the monitoring information about the training (loss curve, ...), the metrics and plots for the link prediction and anomaly detection task.
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+experiments/
+├── optc_051
+│   ├── dygformer
+│   ├── graphmixer
+│   └── tgat
+└── optc_201
+    ├── dygformer
+    ├── graphmixer
+    └── tgat
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+experiments/optc_051/dygformer/
+├── 2hop_neighbor_negative_sampling_DyGFormer_seed0
+│   └── logs
+├── ad_results
+├── anomaly_detection
+├── DyGFormer_seed0
+│   ├── logs
+│   ├── loss
+│   └── saved_models
+├── historical_negative_sampling_DyGFormer_seed0
+│   └── logs
+├── json
+├── link_prediction
+├── pdf_anom
+├── popular_negative_sampling_DyGFormer_seed0
+│   └── logs
+├── random_negative_sampling_DyGFormer_seed0
+│   └── logs
+├── saved_results
+├── visualisation
+└── weird_predictions
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+* after train_link_ano_insertion
+    * DyGFormer_seed0: 
+        * logs: contains a log file with information on the training
+        * loss: contains loss curve and csv file of the training
+        * saved_models: contains the trained model
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+* after test_anomaly_detection
+    * link_prediction:
+        * a report file showing the metrics for the link prediction task (computed on validation set)
+        * plots (ROC, AP curve, calibration)
+    * anomaly_detection
+        * a report file showing the metrics for the anomaly detection task at the edge level (computed on test set)
+        * a report file showing the metrics for the anomaly detection task at the graph level (computed on test set)
+        * plots at edge level (ROC, AP curve, calibration)
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+## Contact
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+For more information about the code, you can contact me at: alexandrebouvier6@gmail.com
