@@ -30,6 +30,7 @@ class Encoding_builder:
             self.model_cmd_line = load_word2vec_model(model.replace("path", "cmd"))
 
     def build_encoding(self):
+        """Assemble the final node and edge feature matrices for the graph."""
 
         node_types = set(
             data.get("type_") for _, data in self.g.nodes(data=True) if "type_" in data
@@ -82,6 +83,7 @@ class Encoding_builder:
         return features_g, features_e
 
     def mean_path(self, lst):
+        """Average the embeddings for a list of related paths into one vector."""
         if len(lst) > 0:
             return np.mean(lst, axis=0)
         else:
@@ -90,6 +92,7 @@ class Encoding_builder:
     def encoding_process(self, g, nodes):
         # graph
         image_paths = []
+        """Build process-level embeddings from image paths and metadata."""
         parent_image_paths = []
         command_line_paths = []
         sids = []
@@ -144,6 +147,7 @@ class Encoding_builder:
         return features_g, features_e_g
 
     def degree(self, degrees):
+        """Return the maximum and average degree values for a set of nodes."""
         if len(degrees) == 0:
             return 0, 0
         return int(sorted(degrees.values(), reverse=True)[0]), int(
@@ -151,6 +155,7 @@ class Encoding_builder:
         )
 
     def get_degree(self, g, nodes):
+        """Compute graph-level and node-level degree features for the selected nodes."""
         c, d = self.degree(dict(g.degree(nodes)))
         e, f = self.degree(dict(g.in_degree(nodes)))
         h, i = self.degree(dict(g.out_degree(nodes)))
@@ -173,6 +178,7 @@ class Encoding_builder:
         return features_g, features_e
 
     def encoding(self, g, nodes):
+        """Combine multiple feature groups into the final graph encoding."""
         fg_a, fe_a = self.edge_type_for_node_type(g, nodes)
         fg_b, fe_b = self.get_degree(g, nodes)
         fg_c, fe_c = self.lifetimenodes(nodes)
@@ -192,6 +198,7 @@ class Encoding_builder:
 
     def lifetimenodes(self, nodes):
         min_life = 15
+        """Compute lifetime summary statistics for each node in the graph."""
         max_life = 0
         sum_life = 0
 
@@ -209,6 +216,7 @@ class Encoding_builder:
 
     def freq_time_mean(self, node_freq):
         a = []
+        """Average the frequency values stored for each node-type bucket."""
         for _, freq in node_freq.items():
             if len(freq) < 1:
                 a.append(0)
@@ -218,6 +226,7 @@ class Encoding_builder:
 
     def node_time_for_node_type(self, g, nodes):
         node_time_out_freq = {}
+        """Aggregate time-based statistics per node type for incoming and outgoing edges."""
         node_time_in_freq = {}
 
         for type_ in self.cfg["MODEL"]["NODES_TYPES_ALL"]:
@@ -254,6 +263,7 @@ class Encoding_builder:
         return features_g, features_e
 
     def freq_time(self, edges, out, node_time_freq):
+        """Group each edge's lifetime by the neighboring node type for later aggregation."""
         for edge in edges:
             if out:
                 node_type = type(edge[1]).__name__
@@ -269,6 +279,7 @@ class Encoding_builder:
         return node_time_freq
 
     def edge_type_for_node_type(self, g, nodes):
+        """Count edge and node types for each selected node."""
         edge_types_out_freq = {}
         edge_types_in_freq = {}
         node_types_out_freq = {}
@@ -329,6 +340,7 @@ class Encoding_builder:
         return features_g, features_e
 
     def freq_(self, edges, out, edge_types_freq, node_types_freq):
+        """Count incoming and outgoing edge and node type frequencies for the given edges."""
         for edge in edges:
             edge_type = edge[2]["action"]
             if edge_type in edge_types_freq:
@@ -349,17 +361,21 @@ class Encoding_builder:
 
     def set_g(self, g):
         self.g = g
+        """Set the active graph used for feature extraction."""
         return g
 
     def set_encoding_size(self, encoding_size):
         self.encoding_size = encoding_size
+        """Set the expected size of the graph encoding."""
         return encoding_size
 
     def info(self):
         return f"Graph {self.g}."
+        """Return a compact description of the current graph."""
 
 
 def main(clients, graphs, model_w2v_path, dataset, g=False, e=False):
+    """Generate graph and edge features for the clients in the dataset."""
     utils_dataset = importlib.import_module(f"data.{dataset}_utils")
     cfg_dataset = open_config(dataset)
 

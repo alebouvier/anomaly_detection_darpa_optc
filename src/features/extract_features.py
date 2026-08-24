@@ -18,6 +18,7 @@ ACTION_TYPES = ["OPEN", "CREATE", "TERMINATE", "MODIFY", "WRITE", "RENAME", "REA
 
 
 def read_line_csv_file(path: Path) -> Iterator[list]:
+    """Yield non-empty rows from a CSV file one line at a time."""
     mode = "rt" if path.suffix == ".gz" else "r"
     if path.suffix == ".gz":
         f = gzip.open(path, mode=mode, newline="")
@@ -34,6 +35,7 @@ def read_line_csv_file(path: Path) -> Iterator[list]:
 
 
 def count_csv_rows(path: Path) -> int:
+    """Count valid rows in the CSV after skipping the header."""
     mode = "rt" if path.suffix == ".gz" else "r"
     if path.suffix == ".gz":
         f = gzip.open(path, mode=mode, newline="")
@@ -47,6 +49,7 @@ def count_csv_rows(path: Path) -> int:
 
 
 def one_hot_encoding(type_info: str, is_edge: bool) -> List[int]:
+    """Convert a node or edge type into a one-hot feature vector."""
     classes = ACTION_TYPES if is_edge else OBJECT_TYPES
     features = [0] * len(classes)
     if type_info in classes:
@@ -55,6 +58,7 @@ def one_hot_encoding(type_info: str, is_edge: bool) -> List[int]:
 
 
 def build_text_sequence(raw_line: str, cfg) -> str:
+    """Build a single text string from the preprocessed path-command tokens."""
     if raw_line is None:
         return ""
 
@@ -67,6 +71,7 @@ def build_text_sequence(raw_line: str, cfg) -> str:
 
 
 def w2v_encoding(model, cmd_path_info, cfg):
+    """Encode a command-path value with the Word2Vec model."""
     if not pd.isna(cmd_path_info):
         return eval_for_encoding(model, cmd_path_info, cfg).tolist()
     else:
@@ -74,6 +79,7 @@ def w2v_encoding(model, cmd_path_info, cfg):
 
 
 def bert_encoding(tokenizer, model, cmd_path_info, cfg):
+    """Encode a command-path value with the BERT model when it is available."""
     if pd.isna(cmd_path_info) or cmd_path_info in (None, "", 0):
         return [0] * cfg["MODEL"]["LEN_ENCODE_PATH"]
 
@@ -91,12 +97,14 @@ def create_features(
     is_edge: bool,
     nrows: int,
     output_path: Path,
+    use_type: bool = True,
     model_type: str = "w2v",
     bert_tokenizer=None,
     bert_model=None,
 ) -> np.ndarray:
-    dim = len(ACTION_TYPES) if is_edge else len(OBJECT_TYPES)
-    dim += cfg["MODEL"]["LEN_ENCODE_PATH"]
+    """Create the feature matrix for all rows in a processed dataset."""
+    dim_type = len(ACTION_TYPES) if is_edge else len(OBJECT_TYPES)
+    dim = dim_type + cfg["MODEL"]["LEN_ENCODE_PATH"]
     create_folder(output_path.parent)
     features = np.lib.format.open_memmap(
         str(output_path), dtype=float, mode="w+", shape=(nrows, dim)
@@ -110,8 +118,14 @@ def create_features(
 
         type_info = line[0]
         cmd_path_info = line[1]
-        type_embedding = one_hot_encoding(type_info, is_edge)
-        if model_type.lower() == "bert":
+        if use_type:
+            type_embedding = one_hot_encoding(type_info, is_edge)
+        else:
+            type_embedding = [0] * dim_type
+
+        if model_type == "no":
+            cmd_path_embedding = [0] * cfg["MODEL"]["LEN_ENCODE_PATH"]
+        elif model_type.lower() == "bert":
             cmd_path_embedding = bert_encoding(bert_tokenizer, bert_model, cmd_path_info, cfg)
         else:
             cmd_path_embedding = w2v_encoding(model, cmd_path_info, cfg)
@@ -124,6 +138,7 @@ def create_features(
 
 
 def save_processed_data(output_dir: Path, dataset, client, edge_features: np.ndarray, node_features: np.ndarray) -> None:
+    """Persist the generated edge and node feature arrays to disk."""
     create_folder(output_dir)
     np.save(output_dir / f"ml_{dataset}_{client}.npy", edge_features)
     np.save(output_dir / f"ml_{dataset}_{client}_node.npy", node_features)
@@ -133,14 +148,18 @@ def process_client(
     dataset: str,
     client: str,
     cfg,
+    use_type: bool = True,
     model_type: str = "w2v",
     model=None,
     bert_tokenizer=None,
     bert_model=None,
 ) -> None:
+    """Generate processed feature arrays for one client dataset."""
     input_dir = Path(BASE) / "processed_data" / f"{dataset}_{client}"
 
-    if model_type.lower() == "bert":
+    if model_type.lower() == "no":
+        pass
+    elif model_type.lower() == "bert":
         if bert_tokenizer is None or bert_model is None:
             raise ValueError("BERT tokenizer and model must be provided for model_type='bert'.")
     else:
@@ -158,6 +177,7 @@ def process_client(
         is_edge=True,
         nrows=edge_count,
         output_path=edge_output_path,
+        use_type=use_type,
         model_type=model_type,
         bert_tokenizer=bert_tokenizer,
         bert_model=bert_model,
@@ -173,6 +193,7 @@ def process_client(
         is_edge=False,
         nrows=node_count,
         output_path=node_output_path,
+        use_type=use_type,
         model_type=model_type,
         bert_tokenizer=bert_tokenizer,
         bert_model=bert_model,
@@ -181,9 +202,24 @@ def process_client(
 
 
 def main(dataset, clients, model_type: str = "w2v", bert_dir: str | None = None) -> None:
+    """Process all clients for a dataset with the requested embedding model."""
     cfg = open_config(dataset)
 
-    if model_type.lower() == "bert":
+    use_type = True
+    # bert_dir = "google/bert_uncased_L-2_H-128_A-2"
+
+    if model_type.lower() == "no":
+        for client in clients:
+            print(f"Processing client {client} for dataset {dataset} without features")
+            process_client(
+                dataset,
+                client,
+                cfg,
+                use_type=use_type,
+                model_type="no",
+            )
+
+    elif model_type.lower() == "bert":
         if bert_dir is None:
             bert_dir = f"{BASE}/feature_data/Bert_ft"
         tokenizer = BertTokenizerFast.from_pretrained(bert_dir, do_lower_case=True)
@@ -194,6 +230,7 @@ def main(dataset, clients, model_type: str = "w2v", bert_dir: str | None = None)
                 dataset,
                 client,
                 cfg,
+                use_type=use_type,
                 model_type="bert",
                 model=None,
                 bert_tokenizer=tokenizer,
@@ -204,6 +241,6 @@ def main(dataset, clients, model_type: str = "w2v", bert_dir: str | None = None)
         model = load_word2vec_model(model_path)
         for client in clients:
             print(f"Processing client {client} for dataset {dataset} using W2V")
-            process_client(dataset, client, cfg, model_type="w2v", model=model)
+            process_client(dataset, client, cfg, use_type=use_type, model_type="w2v", model=model)
 
 

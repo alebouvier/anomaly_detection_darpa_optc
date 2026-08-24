@@ -31,6 +31,7 @@ from utils.EarlyStopping import EarlyStopping
 
 def main(args):
 
+    """Run the standard link-prediction evaluation pipeline for the selected dataset and model."""
     warnings.filterwarnings("ignore")
 
     # get data for training, validation and testing

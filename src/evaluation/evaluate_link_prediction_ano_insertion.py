@@ -32,6 +32,7 @@ from utils.EarlyStopping import EarlyStopping
 
 def main(args):
 
+    """Run the link-prediction evaluation pipeline with anomaly insertion support."""
     warnings.filterwarnings("ignore")
 
     # get data for training, validation and testing

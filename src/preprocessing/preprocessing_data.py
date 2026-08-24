@@ -35,10 +35,12 @@ class LogStats:
 
 
 def safe_get(data: Optional[dict], key: str) -> Optional[str]:
+    """Return a dictionary value when present, otherwise None."""
     return data.get(key) if isinstance(data, dict) else None
 
 
 def parse_timestamp(timestamp: Optional[str]) -> float:
+    """Parse an ISO-8601 timestamp into a Unix timestamp."""
     if timestamp is None:
         raise ValueError("Missing timestamp in log record")
 
@@ -47,6 +49,7 @@ def parse_timestamp(timestamp: Optional[str]) -> float:
 
 
 def read_log_file(path: Path) -> Iterator[dict]:
+    """Yield JSON log records from a gzip or plain-text log file."""
     opener = gzip.open if path.suffix == ".gz" else open
     with opener(path, "rt") as log_file:
         for line in tqdm(log_file, desc=f"Reading {path.name}", unit="lines"):
@@ -57,11 +60,13 @@ def read_log_file(path: Path) -> Iterator[dict]:
 
 
 def iter_logs(file_paths: Iterable[str]) -> Iterator[dict]:
+    """Iterate over all records across the provided log files."""
     for file_path in file_paths:
         yield from read_log_file(Path(file_path))
 
 
 def collect_log_stats(log_iter: Iterator[dict], anomalies) -> LogStats:
+    """Aggregate the log stream into edge, node, and feature tables for preprocessing."""
     objects = {}
     edge_list: List[List] = []
     edge_features: List[List] = [[None, None]]
@@ -138,6 +143,7 @@ def collect_log_stats(log_iter: Iterator[dict], anomalies) -> LogStats:
     )
 
 def extract_ids(log_iter: Iterator[dict]):
+    """Map each client to the anomaly log IDs present in the input records."""
     anomaly_dict: dict = {}
 
     for log in log_iter:
@@ -155,6 +161,7 @@ def extract_ids(log_iter: Iterator[dict]):
 
 
 def build_dataframes(stats: LogStats) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Build the edge, edge-feature, and node-feature DataFrames from the stats object."""
     df_edge_list = pd.DataFrame(stats.edge_list, columns=EDGE_COLUMNS)
     df_edge_features = pd.DataFrame(stats.edge_features, columns=EDGE_FEATURE_COLUMNS)
     df_node_features = pd.DataFrame(stats.node_features, columns=NODE_COLUMNS)
@@ -162,6 +169,7 @@ def build_dataframes(stats: LogStats) -> tuple[pd.DataFrame, pd.DataFrame, pd.Da
 
 
 def save_preprocessing_data(output_dir: Path, stats: LogStats, dataset, client) -> None:
+    """Persist the processed graph tables and feature files for a client."""
     create_folder(output_dir)
     df_edge_list, df_edge_features, df_node_features = build_dataframes(stats)
 
@@ -172,6 +180,7 @@ def save_preprocessing_data(output_dir: Path, stats: LogStats, dataset, client) 
 
 
 def process_client(logs_dir: str, dataset: str, client: str, anomalies) -> None:
+    """Preprocess the log data for a single client and save the artifacts."""
     dataset_module = importlib.import_module(f"data.{dataset}_utils")
     log_files = dataset_module.logs_from_folder(logs_dir, client)
     stats = collect_log_stats(iter_logs(log_files), anomalies)
@@ -180,6 +189,7 @@ def process_client(logs_dir: str, dataset: str, client: str, anomalies) -> None:
 
 
 def main(logs, dataset, clients) -> None:
+    """Run the full preprocessing pipeline for the requested clients."""
     anomaly_path = [Path(BASE) / "label_data" / "malicious.json"]
     anomalies = extract_ids(iter_logs(anomaly_path))
     for client in clients:

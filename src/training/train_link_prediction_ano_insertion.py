@@ -34,6 +34,7 @@ from utils.EarlyStopping import EarlyStopping
 
 def main(args):
 
+    """Train the link-prediction model with anomaly insertion enabled for the selected dataset."""
     warnings.filterwarnings("ignore")
 
     # get data for training, validation and testing

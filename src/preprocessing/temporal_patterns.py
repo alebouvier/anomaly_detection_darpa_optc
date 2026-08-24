@@ -12,6 +12,7 @@ from tqdm import tqdm
 from utils.utils import period, round_duration, save_pkl, open_config, BASE
 
 def get_unique_stats_features(client, start_val, start_test):
+    """Build the anomaly-path summary features for a client from the processed logs."""
     val_time = dt.datetime.strptime(start_val, "%Y-%m-%dT%H:%M").timestamp()
     test_time = dt.datetime.strptime(start_test, "%Y-%m-%dT%H:%M").timestamp()
 
@@ -89,10 +90,12 @@ def get_unique_stats_features(client, start_val, start_test):
 
 
 def _command_line_key(series):
+    """Normalize a command-line value into a stable key for grouping."""
     return series.fillna("__COMMAND_LINE_NULL__")
 
 
 def find_non_present_edges(split_edges_1, split_edges_2):
+    """Return the edges seen in one split but absent from the other."""
     split_edges_1 = split_edges_1.copy()
     split_edges_2 = split_edges_2.copy()
     split_edges_1["_command_line_key"] = _command_line_key(split_edges_1["command_line"])
@@ -112,6 +115,7 @@ def find_non_present_edges(split_edges_1, split_edges_2):
 
 
 def create_unique_edges_df(split_edges, node_features, edge_features):
+    """Aggregate repeated edges into a unique table with counts and anomaly totals."""
     source_nodes = node_features[["idx", "object_type"]].rename(
         columns={"idx": "node_idx", "object_type": "object_type_src"}
     )
@@ -139,6 +143,7 @@ def create_unique_edges_df(split_edges, node_features, edge_features):
 
 
 def find_similar_edges(split_edges_1, split_edges_2):
+    """Return the edges that appear with the same signature in both splits."""
     split_edges_1 = split_edges_1.copy()
     split_edges_2 = split_edges_2.copy()
     split_edges_1["_command_line_key"] = _command_line_key(split_edges_1["command_line"])
@@ -154,6 +159,7 @@ def find_similar_edges(split_edges_1, split_edges_2):
 
 
 def find_similar_paths(split_paths_1, split_paths_2):
+    """Find two-hop paths with the same structure and commands in both splits."""
     split_paths_1 = split_paths_1.copy()
     split_paths_2 = split_paths_2.copy()
 
@@ -201,6 +207,7 @@ def find_similar_paths(split_paths_1, split_paths_2):
 
 
 def build_edge_signature_df(edges, node_features, edge_features):
+    """Add object-type and command-line signatures to the edge table."""
     source_nodes = node_features[["idx", "object_type"]].rename(
         columns={"idx": "u", "object_type": "object_type_src"}
     )
@@ -220,6 +227,7 @@ def build_edge_signature_df(edges, node_features, edge_features):
 
 
 def find_anomaly_paths_in_train(anomaly_paths, train_edges, node_features, edge_features):
+    """Find anomaly paths that already appear in the training data."""
     train_sig = build_edge_signature_df(train_edges, node_features, edge_features)
 
     anomaly_sig = anomaly_paths.merge(
@@ -322,6 +330,7 @@ def find_anomaly_paths_in_train(anomaly_paths, train_edges, node_features, edge_
 
 
 def normalize_cmdline(cmd):
+    """Normalize a command-line string so similar commands can be compared reliably."""
     if pd.isna(cmd):
         return None
 
@@ -346,6 +355,7 @@ def normalize_cmdline(cmd):
     return s
 
 def find_temporal_paths_length_2(edge_list):
+    """Extract all length-2 temporal paths whose edges occur in chronological order."""
     start_node_list = []
     middle_node_list = []
     end_node_list = []
@@ -370,6 +380,7 @@ def find_temporal_paths_length_2(edge_list):
 
 
 def create_unique_paths_df(split_path, node_features, edge_features, edge_list):
+    """Aggregate repeated temporal paths into a single summary table."""
     path_df = split_path.merge(
         node_features[["idx", "object_type"]].rename(
             columns={"idx": "start", "object_type": "object_type_start"}
@@ -464,6 +475,7 @@ def create_unique_paths_df(split_path, node_features, edge_features, edge_list):
 
 
 def add_anomaly_paths_in_train_val(unique_anomaly_paths, client, start_val, start_test):
+    """Inject synthetic anomaly paths into the training/validation set and return the updated tables."""
     val_time = dt.datetime.strptime(start_val, "%Y-%m-%dT%H:%M").timestamp()
     test_time = dt.datetime.strptime(start_test, "%Y-%m-%dT%H:%M").timestamp()
 
@@ -608,6 +620,7 @@ def add_anomaly_paths_in_train_val(unique_anomaly_paths, client, start_val, star
 
 
 def main(clients, start_val, start_test):
+    """Generate the temporal-pattern anomaly features for the selected clients."""
     for client in clients:
         unique_anomaly_paths = get_unique_stats_features(client, start_val, start_test)
         # unique_anomaly_paths = pd.read_csv(f"{BASE}/processed_data/optc_{client}/unique_anomaly_paths.csv")

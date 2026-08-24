@@ -23,6 +23,7 @@ import time
 
 
 def cosine_beta_schedule(timesteps, s=0.008):
+    """Perform the work of cosine beta schedule."""
     steps = timesteps + 1
     x = torch.linspace(0, timesteps, steps)
     alphas_cumprod = torch.cos(((x / timesteps) + s) / (1 + s) * torch.pi * 0.5) ** 2
@@ -32,17 +33,20 @@ def cosine_beta_schedule(timesteps, s=0.008):
 
 
 def linear_beta_schedule(timesteps):
+    """Perform the work of linear beta schedule."""
     beta_start = 0.0001
     beta_end = 0.02
     return torch.linspace(beta_start, beta_end, timesteps)
 
 
 def quadratic_beta_schedule(timesteps):
+    """Perform the work of quadratic beta schedule."""
     beta_start = 0.0001
     beta_end = 0.02
     return torch.linspace(beta_start**0.5, beta_end**0.5, timesteps) ** 2
 
 def sigmoid_beta_schedule(timesteps):
+    """Perform the work of sigmoid beta schedule."""
     beta_start = 0.0001
     beta_end = 0.02
     betas = torch.linspace(-6, 6, timesteps)
@@ -51,12 +55,14 @@ def sigmoid_beta_schedule(timesteps):
 
 
 def extract(a, t, x_shape):
+    """Perform the work of extract."""
     batch_size = t.shape[0]
     out = a.gather(-1, t.cpu())
     return out.reshape(batch_size, *((1,) * (len(x_shape) - 1))).to(t.device)
 
 
 def normalize_to_neg_one_to_one(emb):
+    """Perform the work of normalize to neg one to one."""
     return emb * 2 - 1
 
 
@@ -68,6 +74,7 @@ class SinusoidalPosEmb(nn.Module):
         self.dim = dim
 
     def forward(self, x):
+        """Perform the work of forward."""
         device = x.device
         half_dim = (self.dim // 2) + 1
         emb = math.log(10000) / (half_dim - 1)
@@ -91,6 +98,7 @@ class Block(nn.Module):
 
     def forward(self, h, t):
 
+        """Perform the work of forward."""
         t = self.time(t)
         scale, shift = t.chunk(2, dim=1)
         h = (scale+1) * h + shift
@@ -116,6 +124,7 @@ class Encoder(nn.Module):
 
     def forward(self, h, t, y):
 
+        """Perform the work of forward."""
         t = self.time_mlp(t)
 
         if y is not None:
@@ -156,6 +165,7 @@ class Diffusion_Cond(nn.Module):
     
     # forward diffusion (using the nice property)
     def q_sample(self, x_start, t, noise=None):
+        """Perform the work of q sample."""
         if noise is None:
             noise = torch.randn_like(x_start)
 
@@ -168,6 +178,7 @@ class Diffusion_Cond(nn.Module):
 
 
     def p_losses(self, x_start, t, labels, noise=None, loss_type="l1"):
+        """Perform the work of p losses."""
         if noise is None:
             noise = torch.randn_like(x_start)
 
@@ -187,6 +198,7 @@ class Diffusion_Cond(nn.Module):
 
 
     def p_sample(self, model, x, t, labels, t_index, cfg_scale=0):
+        """Perform the work of p sample."""
         betas_t = extract(self.betas, t, x.shape)
         sqrt_one_minus_alphas_cumprod_t = extract(
             self.sqrt_one_minus_alphas_cumprod, t, x.shape
@@ -215,7 +227,8 @@ class Diffusion_Cond(nn.Module):
 
 
     # Algorithm 2 (including returning all samples)
-    def p_sample_loop(self, model, shape, y, proportions):
+    def p_sample_loop(self, model, shape, y):
+        """Perform the work of p sample loop."""
         device = next(model.parameters()).device
 
         b = shape[0]
@@ -240,11 +253,13 @@ class Diffusion_Cond(nn.Module):
 
 
     @torch.no_grad()
-    def sample(self, shape, y, proportions=[0, 1/10, 1/8, 1/4, 1/2]):
-        return self.p_sample_loop(self.encoder, shape, y, proportions)
+    def sample(self, shape, y):
+        """Perform the work of sample."""
+        return self.p_sample_loop(self.encoder, shape, y)
 
 
     def forward(self, input, labels, device): 
+        """Perform the work of forward."""
         t = torch.randint(0, self.timesteps, (input.shape[0],), device=device).long()
         return self.p_losses(input, t, labels)
         

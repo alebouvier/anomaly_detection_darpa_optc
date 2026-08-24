@@ -17,6 +17,7 @@ from utils.utils import load_pickle_file, open_config
 
 
 def preprocess_path(line, cfg):
+    """Normalize a path-like string and split it into its logical components."""
     line_treatmnt = line.replace("\\", "/")  # Normalize path
     line_treatmnt = re.sub(
         re.compile(cfg["MODEL"]["HARD_DEVICE"]),
@@ -45,6 +46,7 @@ def preprocess_path(line, cfg):
 
 
 def preprocess_command_line(line, cfg):
+    """Split a command line into tokenized path and argument fragments."""
     data_lst_complet = []
     m = re.compile(cfg["MODEL"]["SPLIT_PATH_COMMAND_LINE"])
     data_lst = re.findall(m, line)
@@ -71,6 +73,7 @@ def preprocess_command_line(line, cfg):
 
 
 def eval_for_encoding(tokenizer, model, data, is_command, cfg):
+    """Encode a path or command line into the model embedding space."""
     if data == 0:
         return np.zeros(cfg["MODEL"]["LEN_ENCODE_PATH"])
     else:
@@ -86,57 +89,9 @@ def eval_for_encoding(tokenizer, model, data, is_command, cfg):
         return sentences_emb
 
 
-# def eval_unknown(lst, unkown_index, h, model, last, cfg):
-#     emb = []
-#     index = 1
-#     p = 0
-#     while p < len(unkown_index):
-#         k = unkown_index[p]
-#         for i in range(min(k + 1, len(h)), len(h)):
-#             if i in unkown_index:
-#                 index += 1
-#             else:
-#                 break
-
-#         if p + 1 < len(unkown_index):
-#             next = unkown_index[p + 1]
-#         else:
-#             next = len(h)
-
-#         for i in range(max(0, k - cfg["MODEL"]["WINDOW"]), k):
-#             try:
-#                 emb.append(get_word_embedding(h[i], tokenizer, model))
-#             except Exception as e:
-#                 print(f"Error {e}")
-#         for i in range(
-#             k + index, min(len(h), k + cfg["MODEL"]["WINDOW"] + index, next)
-#         ):
-#             try:
-#                 emb.append(model(h[i], return_tensors='np'))
-#             except Exception as e:
-#                 print(f"Error {e}")
-
-#         # if len(emb) > 0:
-#         #     context_emb = np.mean(np.array(emb), axis=0)
-#         #     most_similar = model.wv.similar_by_vector(context_emb, topn=2)
-#         #     unkown_emb = [model(i[0], return_tensors='np') for i in most_similar]
-#         #     unkown_emb = np.mean(np.array(unkown_emb), axis=0)
-
-#         #     for j in range(index):
-#         #         lst.append(
-#         #             eval_function_coeff_path_2combine(unkown_emb, last, h, k + j)
-#         #         )
-#         #         model.wv.add_vector(h[k + j], unkown_emb)
-#         #         model.wv.fill_norms(force=True)
-#         # else:
-#         #     lst.append(np.mean(model.wv.vectors, axis=0))
-
-#         p += index
-#         index = 1
-#     return lst
-
 
 def eval_function_coeff_path_2combine(enc, last, h, k):
+    """Blend the embedding with a position-dependent coefficient along the path."""
     b = 1
     if k < len(h) - last:
         res = ((-b / (len(h) + 1)) * k + b) * enc
@@ -146,6 +101,7 @@ def eval_function_coeff_path_2combine(enc, last, h, k):
 
 
 def eval_function_coeff_path_decrois_geo(enc, last, h, k, ulast, q=0.1):
+    """Apply the geometric decay rule to weight the current path embedding."""
     if k < len(h) - last:
         res = (q * ulast) * enc
     else:
@@ -154,10 +110,12 @@ def eval_function_coeff_path_decrois_geo(enc, last, h, k, ulast, q=0.1):
 
 
 def eval_function_coeff_path_const(enc):
+    """Return the embedding unchanged."""
     return enc
 
 
 def get_sequence_embedding(sequence: str, tokenizer, model) -> torch.Tensor:
+    """Extract the contextual embedding for a tokenized input sequence."""
     inputs = tokenizer(sequence, return_tensors="pt")
 
     with torch.no_grad():
@@ -169,6 +127,7 @@ def get_sequence_embedding(sequence: str, tokenizer, model) -> torch.Tensor:
 
 
 def encode_text(tokenizer, model, text, cfg):
+    """Encode text into a fixed-length vector for downstream feature extraction."""
     if text is None or text == 0 or text == "":
         return np.zeros(cfg["MODEL"]["LEN_ENCODE_PATH"])
     seq_embedding = get_sequence_embedding(text, tokenizer, model)
@@ -176,6 +135,7 @@ def encode_text(tokenizer, model, text, cfg):
 
 
 def eval(tokenizer, model, data, is_command, cfg, f="const", q=0.1):
+    """Aggregate a path's token embeddings and return the combined representation."""
     h = data[0]
     ext = data[1]
     if ext:
