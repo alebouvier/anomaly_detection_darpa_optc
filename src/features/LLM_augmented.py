@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from features.system_prompt import SYSTEM_PROMPT, FALLBACK_BATCH_SYSTEM_PROMPT, TEMPLATE_GENERATION_SYSTEM_PROMPT
 
 
-genai.configure(api_key="AIzaSyCUzeOP2HNOgyxFwOLKTMja7tXElGalmGM")  # free at aistudio.google.com
+genai.configure(api_key="APIkey")  # free at aistudio.google.com
 
 
 def _strip_markdown_codeblock(text: str) -> str:
