@@ -1,6 +1,6 @@
 # optc_ad_project
 
-The project consists in detecting malicious events in the OpTC dataset leveraging link prediction methods for temporal graphs data.
+The project consists in detecting malicious events in the OpTC dataset leveraging link prediction methods for temporal graphs data. See the following report for more information on the project: [Report](report_and_slides/Rapport_stage_Alexandre_Bouvier_IS5.pdf).
 
 This git repository contains a full pipeline from data prepocessing, link prediction model training and anomaly detection.
 
